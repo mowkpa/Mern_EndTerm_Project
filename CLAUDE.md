@@ -1,0 +1,13 @@
+# SlotSync builder rules
+- Source of truth: SPEC.md. Do not invent features outside it.
+- Stack: React + Vite, Redux Toolkit, Tailwind (frontend); Node + Express (ES modules), Mongoose, Socket.IO, node-cron, Zod (backend); Vitest + Supertest + mongodb-memory-server (tests).
+- Layering: routes -> middlewares -> controllers -> services -> models. Controllers contain no business rules. ALL booking rules live in services/.
+- Time: every date is a "YYYY-MM-DD" string and every slot is an integer start hour, interpreted in Asia/Kolkata. Never use the server's local timezone. Use utils/time.js only.
+- Status changes: only through service functions that use atomic conditional updates (findOneAndUpdate with the expected current status). Never assign booking.status directly.
+- Every route validates input with Zod and returns { message } on errors with a correct HTTP status.
+- Never log or return password hashes. Never trust a user id or role from the request body.
+- Every UI screen needs loading, empty, error and success states.
+- Commit after every milestone with the given message. Small, meaningful commits.
+- Never commit .env, secrets or node_modules. Keep .env.example files up to date.
+- Write tests with each milestone. Run `npm test` before every commit.
+- Keep code simple and readable. No unused dependencies.

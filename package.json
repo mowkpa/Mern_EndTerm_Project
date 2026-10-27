@@ -1,0 +1,12 @@
+{
+  "name": "slotsync",
+  "version": "1.0.0",
+  "description": "Smart Campus Room & Lab Booking System",
+  "scripts": {
+    "test": "npm --prefix backend test",
+    "seed": "npm --prefix backend run seed",
+    "build": "npm --prefix frontend/vite-project run build"
+  },
+  "author": "",
+  "license": "ISC"
+}
