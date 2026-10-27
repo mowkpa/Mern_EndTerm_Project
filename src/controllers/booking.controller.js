@@ -1,4 +1,9 @@
-import { createBooking } from '../services/booking.service.js';
+import {
+  createBooking,
+  approveBooking,
+  rejectBooking,
+  getPendingApprovals,
+} from '../services/booking.service.js';
 import { Booking } from '../models/booking.model.js';
 import { httpError } from '../utils/httpError.js';
 import { todayIST } from '../utils/time.js';
@@ -65,4 +70,20 @@ export const getBookingById = async (req, res) => {
   }
 
   res.status(200).json({ booking });
+};
+
+export const approve = async (req, res) => {
+  const booking = await approveBooking(req.params.id, req.user);
+  res.status(200).json({ message: 'Booking approved successfully', booking });
+};
+
+export const reject = async (req, res) => {
+  const { note } = req.body || {};
+  const booking = await rejectBooking(req.params.id, req.user, note);
+  res.status(200).json({ message: 'Booking rejected', booking });
+};
+
+export const getApprovals = async (req, res) => {
+  const approvals = await getPendingApprovals();
+  res.status(200).json({ approvals });
 };
