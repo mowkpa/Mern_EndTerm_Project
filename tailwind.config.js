@@ -10,6 +10,8 @@ export default {
         surface: 'var(--surface)',
         line: 'var(--line)',
         'text-2': 'var(--text-2)',
+        'sidebar-bg': 'var(--sidebar-bg)',
+        'sidebar-border': 'var(--sidebar-border)',
         mine: 'var(--mine)',
         'mine-bg': 'var(--mine-bg)',
         free: 'var(--free)',

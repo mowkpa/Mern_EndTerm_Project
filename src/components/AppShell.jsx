@@ -50,7 +50,7 @@ export const AppShell = ({ children }) => {
     try {
       const stored = localStorage.getItem('slotsync-theme');
       if (stored) return stored === 'dark';
-      return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      return false;
     } catch {
       return false;
     }
@@ -168,9 +168,9 @@ export const AppShell = ({ children }) => {
   return (
     <div className="min-h-screen bg-paper flex text-ink font-body">
       {/* Desktop & Tablet Sidebar */}
-      <aside className="hidden sm:flex flex-col w-16 lg:w-[232px] shrink-0 bg-ink text-white select-none sticky top-0 h-screen z-30 transition-all duration-200">
+      <aside className="hidden sm:flex flex-col w-16 lg:w-[232px] shrink-0 bg-sidebar-bg border-r border-sidebar-border text-white select-none sticky top-0 h-screen z-30 transition-all duration-200">
         {/* Brand Header */}
-        <div className="h-16 px-4 lg:px-5 border-b border-white/10 flex items-center gap-3">
+        <div className="h-16 px-4 lg:px-5 border-b border-sidebar-border flex items-center gap-3">
           <div className="w-8 h-8 rounded-control bg-mine flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-xs">
             S
           </div>
@@ -206,7 +206,7 @@ export const AppShell = ({ children }) => {
 
           {/* Admin Group */}
           {user.role === 'admin' && (
-            <div className="pt-3 border-t border-white/10 space-y-1">
+            <div className="pt-3 border-t border-sidebar-border space-y-1">
               <span className="hidden lg:block px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
                 Admin
               </span>
@@ -242,7 +242,7 @@ export const AppShell = ({ children }) => {
         </div>
 
         {/* User Profile Footer */}
-        <div className="p-3 border-t border-white/10 flex items-center justify-between gap-2">
+        <div className="p-3 border-t border-sidebar-border flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
             <Avatar name={user.name} size="sm" />
             <div className="hidden lg:block min-w-0">

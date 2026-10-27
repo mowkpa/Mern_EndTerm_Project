@@ -67,7 +67,7 @@ export default function Login() {
   return (
     <div className="min-h-screen grid grid-cols-1 lg:grid-cols-12 bg-paper">
       {/* Left Column (--ink) */}
-      <div className="hidden lg:flex lg:col-span-5 bg-ink text-white p-10 xl:p-14 flex-col justify-between">
+      <div className="hidden lg:flex lg:col-span-5 bg-sidebar-bg border-r border-sidebar-border text-white p-10 xl:p-14 flex-col justify-between">
         <NavLink to="/" className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-control bg-mine flex items-center justify-center text-white font-bold text-sm">
             S
