@@ -20,7 +20,11 @@ export const connectDB = async (uri = env.MONGODB_URI) => {
       try {
         console.log('[SlotSync DB] Launching embedded in-memory MongoDB for zero-configuration deployment/development...');
         const { MongoMemoryServer } = await import('mongodb-memory-server');
-        mongodInstance = await MongoMemoryServer.create();
+        mongodInstance = await MongoMemoryServer.create({
+          binary: {
+            version: process.env.MONGOMS_VERSION || '7.0.14',
+          },
+        });
         const memUri = mongodInstance.getUri();
         const conn = await mongoose.connect(memUri);
         console.log(`[SlotSync DB] Connected to embedded in-memory MongoDB at: ${memUri}`);
