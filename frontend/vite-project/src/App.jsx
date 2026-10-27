@@ -24,6 +24,7 @@ import Rooms from './pages/admin/Rooms';
 import Blackouts from './pages/admin/Blackouts';
 import Users from './pages/admin/Users';
 import Analytics from './pages/admin/Analytics';
+import DevUiShowcase from './pages/DevUiShowcase';
 
 export default function App() {
   const dispatch = useDispatch();
@@ -52,6 +53,7 @@ export default function App() {
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            {import.meta.env.DEV && <Route path="/dev/ui" element={<DevUiShowcase />} />}
 
             {/* Authenticated Routes */}
             <Route
