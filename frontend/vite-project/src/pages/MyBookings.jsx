@@ -95,10 +95,10 @@ export default function MyBookings() {
       {/* Page Title & Scope Tabs */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-            My Reservations
+          <h1 className="font-heading font-bold text-2xl sm:text-3xl text-ink tracking-tight">
+            My bookings
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+          <p className="text-xs sm:text-sm text-text-2 mt-1">
             Track active reservations, check in on arrival, or manage cancellations.
           </p>
         </div>

@@ -81,11 +81,10 @@ export default function Analytics() {
       {/* Header and Date Filter */}
       <div className="pb-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <BarChart3 className="w-6 h-6 text-primary-600" />
-            Campus Utilization & Analytics
+          <h1 className="font-heading font-bold text-2xl sm:text-3xl text-ink tracking-tight">
+            Analytics
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+          <p className="text-xs sm:text-sm text-text-2 mt-1">
             Real-time space metrics aggregated directly from database transaction logs.
           </p>
         </div>

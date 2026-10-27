@@ -1,134 +1,202 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import React, { useState } from 'react';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { Calendar, Lock, Mail, AlertCircle, ArrowRight } from 'lucide-react';
-import { login, clearError } from '../store/authSlice';
-import Spinner from '../components/Spinner';
+import { Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { loginUser } from '../store/authSlice';
+import { useToast } from '../components/ui/Toast';
+import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
+import MiniBoard from '../components/MiniBoard';
 
 export default function Login() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const location = useLocation();
+  const { addToast } = useToast();
+  const { user } = useSelector((state) => state.auth);
 
-  const { user, actionLoading, error } = useSelector((state) => state.auth);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [errorMsg, setErrorMsg] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    dispatch(clearError());
+  React.useEffect(() => {
     if (user) {
-      const from = location.state?.from?.pathname || '/search';
-      navigate(from, { replace: true });
+      navigate('/home');
     }
-  }, [user, navigate, dispatch, location]);
+  }, [user, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!email || !password) return;
-    dispatch(login({ email, password }));
+    if (!email.trim() || !password) {
+      setErrorMsg('Please enter both email and password.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setErrorMsg(null);
+      await dispatch(loginUser({ email: email.trim(), password })).unwrap();
+      addToast('Welcome back to SlotSync!', 'success');
+      navigate('/home');
+    } catch (err) {
+      setErrorMsg(err || 'Invalid email or password.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleFillDemo = (demoEmail) => {
+  const handleDemoFill = async (demoEmail) => {
     setEmail(demoEmail);
     setPassword('Demo@12345');
+    try {
+      setLoading(true);
+      setErrorMsg(null);
+      await dispatch(loginUser({ email: demoEmail, password: 'Demo@12345' })).unwrap();
+      addToast('Logged in with demo credentials!', 'success');
+      navigate('/home');
+    } catch (err) {
+      setErrorMsg(err || 'Failed to sign in with demo credentials');
+    } finally {
+      setLoading(false);
+    }
   };
 
+  const showDemo = import.meta.env.VITE_SHOW_DEMO_LOGINS !== 'false';
+
   return (
-    <div className="min-h-[85vh] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-6 bg-white p-8 sm:p-10 rounded-2xl shadow-sm border border-slate-200">
-        <div className="text-center">
-          <div className="mx-auto w-12 h-12 rounded-2xl bg-primary-600 text-white flex items-center justify-center shadow-md shadow-primary-500/20 mb-3">
-            <Calendar className="w-6 h-6" />
+    <div className="min-h-screen grid grid-cols-1 lg:grid-cols-12 bg-paper">
+      {/* Left Column (--ink) */}
+      <div className="hidden lg:flex lg:col-span-5 bg-ink text-white p-10 xl:p-14 flex-col justify-between">
+        <NavLink to="/" className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-control bg-mine flex items-center justify-center text-white font-bold text-sm">
+            S
           </div>
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900">Welcome Back</h2>
-          <p className="text-xs text-slate-500 mt-1">Sign in with your campus account credentials</p>
+          <span className="font-heading font-bold text-xl text-white">SlotSync</span>
+        </NavLink>
+
+        <div className="space-y-6">
+          <div className="space-y-2">
+            <h2 className="font-heading font-bold text-3xl text-white leading-tight">
+              A smarter way to book campus spaces.
+            </h2>
+            <p className="text-sm text-slate-400">
+              Check live slots in Asia/Kolkata time, line up with automatic FIFO promotion, and avoid double bookings.
+            </p>
+          </div>
+          <MiniBoard className="shadow-2xl" />
         </div>
 
-        {/* Evaluator Quick Autofill Bar */}
-        <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
-          <p className="text-[11px] font-semibold text-slate-600 mb-2">Autofill Demo Account:</p>
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              type="button"
-              onClick={() => handleFillDemo('admin@slotsync.demo')}
-              className="text-xs px-2.5 py-1 bg-white hover:bg-primary-50 hover:text-primary-600 border border-slate-200 rounded-md font-medium text-slate-700 transition-colors shadow-2xs"
+        <div className="text-xs text-slate-500">
+          SlotSync Campus Booking System • Asia/Kolkata (IST)
+        </div>
+      </div>
+
+      {/* Right Column (Form) */}
+      <div className="lg:col-span-7 flex items-center justify-center p-6 sm:p-12">
+        <div className="w-full max-w-md space-y-6">
+          <div>
+            <h1 className="font-heading font-bold text-2xl sm:text-3xl text-ink">
+              Sign in to SlotSync
+            </h1>
+            <p className="text-xs sm:text-sm text-text-2 mt-1">
+              Enter your university email to access rooms and reservations.
+            </p>
+          </div>
+
+          {errorMsg && (
+            <div className="p-3.5 rounded-control bg-danger-bg border border-danger/30 text-danger text-xs flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <Input
+              label="Campus Email Address"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="e.g. student@slotsync.demo"
+              required
+              autoFocus
+            />
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-semibold text-text-2">
+                  Password
+                </label>
+              </div>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter your password"
+                  required
+                  className="w-full h-10 px-3 pr-10 text-sm text-ink bg-surface border border-line rounded-control focus:outline-hidden focus:border-mine focus:ring-1 focus:ring-mine"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-text-2 hover:text-ink transition-colors"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <Button
+              type="submit"
+              variant="primary"
+              size="lg"
+              className="w-full font-semibold"
+              isLoading={loading}
             >
-              Admin
-            </button>
-            <button
-              type="button"
-              onClick={() => handleFillDemo('faculty@slotsync.demo')}
-              className="text-xs px-2.5 py-1 bg-white hover:bg-primary-50 hover:text-primary-600 border border-slate-200 rounded-md font-medium text-slate-700 transition-colors shadow-2xs"
-            >
-              Faculty
-            </button>
-            <button
-              type="button"
-              onClick={() => handleFillDemo('student1@slotsync.demo')}
-              className="text-xs px-2.5 py-1 bg-white hover:bg-primary-50 hover:text-primary-600 border border-slate-200 rounded-md font-medium text-slate-700 transition-colors shadow-2xs"
-            >
-              Student
-            </button>
+              Sign in
+            </Button>
+          </form>
+
+          {/* Demo Logins */}
+          {showDemo && (
+            <div className="pt-4 border-t border-line space-y-2">
+              <span className="text-[11px] font-semibold text-text-2 uppercase tracking-wide block text-center">
+                Demo accounts (testing only)
+              </span>
+              <div className="grid grid-cols-3 gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => handleDemoFill('admin@slotsync.demo')}
+                >
+                  Admin
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => handleDemoFill('faculty@slotsync.demo')}
+                >
+                  Faculty
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => handleDemoFill('student1@slotsync.demo')}
+                >
+                  Student
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <div className="text-center text-xs text-text-2">
+            Don't have an account yet?{' '}
+            <NavLink to="/register" className="font-semibold text-mine hover:underline">
+              Create an account
+            </NavLink>
           </div>
         </div>
-
-        {error && (
-          <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        <form className="space-y-4" onSubmit={handleSubmit}>
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Email Address
-            </label>
-            <div className="relative">
-              <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@slotsync.demo"
-                className="w-full pl-10 pr-3 py-2.5 text-sm rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Password
-            </label>
-            <div className="relative">
-              <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full pl-10 pr-3 py-2.5 text-sm rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
-              />
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={actionLoading || !email || !password}
-            className="w-full py-2.5 px-4 rounded-xl text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 shadow-sm shadow-primary-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            {actionLoading ? <Spinner size="sm" /> : 'Sign In'}
-          </button>
-        </form>
-
-        <p className="text-center text-xs text-slate-500">
-          Don't have an account?{' '}
-          <Link to="/register" className="font-semibold text-primary-600 hover:text-primary-700">
-            Create account
-          </Link>
-        </p>
       </div>
     </div>
   );

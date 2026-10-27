@@ -54,11 +54,11 @@ export default function MyWaitlist() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      <div className="pb-4 border-b border-slate-200">
-        <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-          My Waitlist Queue
+      <div className="pb-4 border-b border-line">
+        <h1 className="font-heading font-bold text-2xl sm:text-3xl text-ink tracking-tight">
+          Waitlist queue
         </h1>
-        <p className="text-xs sm:text-sm text-slate-500 mt-1">
+        <p className="text-xs sm:text-sm text-text-2 mt-1">
           When an occupied slot is cancelled or released as a no-show, you will automatically be
           promoted according to your queue order.
         </p>
