@@ -33,6 +33,7 @@ import {
   getAddDaysIST,
   getISTCurrentHour,
   formatDateLabel,
+  formatSlotRange,
 } from '../utils/time';
 
 export default function Search() {
@@ -283,6 +284,27 @@ export default function Search() {
       addToast(err.response?.data?.message || 'Failed to leave waitlist', 'error');
     } finally {
       setWaitlistLoading(false);
+    }
+  };
+
+  const handleBookAlternative = async (alt) => {
+    try {
+      await api.post('/bookings', {
+        roomId: alt.roomId,
+        date: alt.date,
+        slot: alt.slot,
+        purpose: 'Study & Discussion (Smart Alternative)',
+      });
+      setTakenDrawerOpen(false);
+      addToast(`Booked ${alt.roomName} on ${alt.date} (${formatSlotRange(alt.slot)})!`, 'success');
+      if (alt.date !== date) {
+        setDate(alt.date);
+      } else {
+        fetchAvailability();
+      }
+    } catch (err) {
+      addToast(err.response?.data?.message || 'Failed to book alternative slot', 'error');
+      throw err;
     }
   };
 
@@ -622,6 +644,7 @@ export default function Search() {
         slotData={activeTakenSlotData}
         onJoinWaitlist={handleJoinWaitlist}
         onLeaveWaitlist={handleLeaveWaitlist}
+        onBookAlternative={handleBookAlternative}
         waitlistLoading={waitlistLoading}
       />
     </div>
