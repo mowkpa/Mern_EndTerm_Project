@@ -1,13 +1,13 @@
-# SlotSync
+﻿# SlotSync
 
-A smart campus room and lab booking system with approvals, waitlists, no-show release, and usage analytics.
+A smart campus room and lab booking system with timetable board, multi-hour range booking, automated waitlists, no-show release, smart alternatives, admin audit trail, and operational analytics.
 
 | Detail | Information |
 |---|---|
 | **Author** | SlotSync Engineering Team |
 | **Live application** | [https://slotsync.vercel.app](https://slotsync.vercel.app) |
 | **Backend API** | [https://slotsync-api.onrender.com](https://slotsync-api.onrender.com) (health check: `/health`) |
-| **Full design spec** | [SPEC.md](SPEC.md) |
+| **Full design spec** | [SPEC.md](SPEC.md) & [ENHANCE.md](ENHANCE.md) |
 | **Architectural decisions** | [docs/DECISIONS.md](docs/DECISIONS.md) |
 
 ### Demo Accounts (Seeded Demo Data)
@@ -28,14 +28,13 @@ A smart campus room and lab booking system with approvals, waitlists, no-show re
 2. [Target Users](#2-target-users)
 3. [Solution](#3-solution)
 4. [Key Features](#4-key-features)
-5. [Tech Stack](#5-tech-stack)
-6. [Architecture](#6-architecture)
+5. [Tech Stack & Design System](#5-tech-stack--design-system)
+6. [Architecture & Concurrency Safety](#6-architecture--concurrency-safety)
 7. [Local Setup](#7-local-setup)
 8. [Environment Variables](#8-environment-variables)
 9. [Deployment](#9-deployment)
-10. [Testing](#10-testing)
-11. [Security](#11-security)
-12. [Known Limitations](#12-known-limitations)
+10. [Testing Suite (93 Tests)](#10-testing-suite-93-tests)
+11. [Security & Compliance](#11-security--compliance)
 
 ---
 
@@ -43,39 +42,67 @@ A smart campus room and lab booking system with approvals, waitlists, no-show re
 Shared spaces on campus (study rooms, computer labs, seminar halls) are frequently scheduled via spreadsheets or chat messages. This causes major recurring problems:
 - **Double bookings**: Two groups arrive for the same space simultaneously.
 - **Ghost bookings**: People book rooms and fail to show up, leaving spaces empty while others are turned away.
+- **Fragmented scheduling**: Booking multi-hour blocks is prone to partial conflicts and race conditions.
 - **Manual approval bottlenecks**: High-value rooms (specialized labs, seminar halls) require staff permission that gets delayed or lost.
 - **Zero data visibility**: Administration cannot determine which rooms are over- or under-utilized.
 
 ---
 
 ## 2. Target Users
-- **Students**: Search available study spaces, book within quota (3 slots/day), check in on arrival, or join waitlists for popular slots.
-- **Faculty**: Reserve classrooms and project labs with higher quotas (6 slots/day).
-- **Admins & Department Staff**: Review approval queues, configure rooms and blackout dates, oversee user roles, and monitor utilization analytics.
+- **Students**: Search available study spaces on a live timetable board, book up to 4-hour contiguous ranges within quota (3 slots/day), check in on arrival, export bookings to calendar (.ics), or join waitlists.
+- **Faculty**: Reserve classrooms and project labs with higher quotas (6 slots/day) and smart alternatives recommendations.
+- **Admins & Department Staff**: Review approval queues, configure rooms via slide-over drawers, schedule blackouts grouped by month, manage user roles, audit administrative actions, and analyze demand heatmaps.
 
 ---
 
 ## 3. Solution
 SlotSync automates room scheduling through stateful business rules:
 - **Race-Safe Booking**: MongoDB partial unique compound indexes enforce single-occupancy guarantees at the database level.
-- **Approval Engine**: Restricted spaces automatically route to pending approval queues.
-- **Automatic Waitlists**: If a slot is cancelled or released, the earliest eligible waitlisted student is auto-promoted and notified in real time.
-- **No-Show Scheduler**: Bookings not checked into within 15 minutes of slot start are released to the waitlist.
-- **Admin Analytics**: Real-time charts covering room utilization, peak hours, and no-show rates.
+- **All-or-Nothing Multi-Hour Booking**: Contiguous ranges up to 4 hours with compensating rollbacks on partial failure.
+- **Smart Alternatives & Historical Release Likelihood**: Ranked alternate rooms based on building proximity, capacity fit, and equipment superset, plus a 30-day historical release rate.
+- **Automatic Waitlists & Reminders**: FIFO queues with auto-promotion on cancellation or no-show; 10-minute check-in reminders and RFC 5545 `.ics` downloads.
+- **Immutable Admin Audit Trail**: Complete activity logs for all approvals, cancellations, room modifications, blackouts, and role changes.
+- **Operational Analytics & Insights**: 7x24 demand heatmap, period-over-period deltas, rule-based congestion alerts, and RFC 4180 CSV export.
 
 ---
 
 ## 4. Key Features
-- **Workflow 1: Auth & Roles**: JWT in httpOnly cookie; student, faculty, and admin role enforcement.
-- **Workflow 2: Search & Book**: Room filters (date, time window, capacity, equipment), interactive color-coded slot grid (`free`, `booked`, `mine`, `blackout`, `past`), and quota validation.
-- **Workflow 3: Approvals**: Restricted rooms require staff approval with rejection reason support.
-- **Workflow 4: Waitlist Auto-Promotion**: FIFO queue with automatic promotion on cancellation or no-show.
-- **Workflow 5: No-Show Release & Analytics**: Automated check-in window and analytics visualizations via Recharts.
+
+### 📅 Timetable Board (`/search`)
+- Rooms grouped by building with sticky headers and sticky room column.
+- Live red "now" line with pulsing head positioned across current hour.
+- Contiguous range booking (up to 4 hours) with instant preview drawer.
+- Taken-slot drawer displaying room release likelihood and 1-click alternative suggestions.
+
+### 🏠 Student & Admin Dashboards (`/home`)
+- **Student**: "Next up" card with live countdown, 1-click check-in window button, quick-book shortcuts, waitlist reminders, and recent notification feed.
+- **Admin**: 4 KPI cards (Today's Bookings, Capacity Utilization, No-Show Rate, Active Rooms) with deltas, pending approval queue, and quick navigation.
+
+### 🛡️ Admin Management & Audit Log (`/admin/*`)
+- **Approvals**: Card-based review with requester profile, room specs, and inline Approve/Reject with note.
+- **Rooms**: Table with slide-over `Drawer` for physical specs, equipment tags, approval requirements, and active toggle.
+- **Blackouts**: Grouped by month with non-destructive overlap notices.
+- **Users**: Directory with instant role delegation, quota indicators, and self-demote safeguards.
+- **Activity Log**: Chronological audit timeline showing actor, action badge, summary sentence, and timestamp.
+
+### 📊 Upgraded Analytics (`/admin/analytics`)
+- Period presets (7d, 30d, custom date range).
+- 4 KPI cards with percentage deltas vs previous period.
+- Rule-based insight banners (high no-shows >25%, peak congestion >85%, low utilization <20%, stale approvals >24h).
+- 7-day x 24-hour demand heatmap matrix with interactive hover stats.
+- Room utilization bar chart and attended vs no-show trend lines via Recharts.
+- RFC 4180 compliant CSV export streaming.
+
+### 🎨 Design System & Accessibility
+- Typography: Bricolage Grotesque (headings) & Public Sans (body, tabular nums).
+- Design tokens with CSS custom properties (`--ink`, `--paper`, `--surface`, `--line`, `--mine`, `--free`, `--pending`, `--danger`).
+- Smooth animations via `motion/react` with spring damping and `prefers-reduced-motion` compliance.
+- Complete dark mode toggle saved in `localStorage`.
 
 ---
 
-## 5. Tech Stack
-- **Frontend**: React 18, Vite, Redux Toolkit, React Router 6, Axios, Recharts, Tailwind CSS, Lucide Icons.
+## 5. Tech Stack & Design System
+- **Frontend**: React 18, Vite, Redux Toolkit, React Router 6, Axios, Recharts, Tailwind CSS, Motion (`motion/react`), Lucide Icons.
 - **Backend**: Node.js, Express (ES Modules), Mongoose, Socket.IO, node-cron, Zod.
 - **Database**: MongoDB Atlas with partial unique indexes.
 - **Testing**: Vitest, Supertest, mongodb-memory-server.
@@ -83,38 +110,30 @@ SlotSync automates room scheduling through stateful business rules:
 
 ---
 
-## 6. Architecture
+## 6. Architecture & Concurrency Safety
 ```
                          USER (Browser)
-                              |
-                              v
-                     +------------------+
-                     |  Vercel          |
-                     |  React SPA (Vite)|
-                     +--------+---------+
-                              |
-                  HTTPS REST + Socket.IO (Cookie Auth)
-                              |
-                              v
-                     +------------------+
-                     |  Render          |
-                     |  Express API     |
-                     |  Socket.IO       |
-                     |  node-cron jobs  |
-                     +--------+---------+
-                              |
-                              v
-                     +------------------+
-                     |  MongoDB Atlas   |
-                     +------------------+
-```
-
-### Backend Layering
-```
-routes  ->  middlewares (auth, role, validate, rateLimit)
-        ->  controllers (HTTP request/response handling)
-        ->  services    (All state transitions & business logic)
-        ->  models      (Mongoose schemas & indexes)
+                               |
+                               v
+                      +------------------+
+                      |  Vercel          |
+                      |  React SPA (Vite)|
+                      +--------+---------+
+                               |
+                   HTTPS REST + Socket.IO (Cookie Auth)
+                               |
+                               v
+                      +------------------+
+                      |  Render          |
+                      |  Express API     |
+                      |  Socket.IO       |
+                      |  node-cron jobs  |
+                      +--------+---------+
+                               |
+                               v
+                      +------------------+
+                      |  MongoDB Atlas   |
+                      +------------------+
 ```
 
 ### Booking State Machine
@@ -164,8 +183,6 @@ npm install
 npm run dev        # Runs on http://localhost:5173
 ```
 
-Log in using `admin@slotsync.demo` or `student1@slotsync.demo` with password `Demo@12345`.
-
 ---
 
 ## 8. Environment Variables
@@ -182,7 +199,6 @@ Log in using `admin@slotsync.demo` or `student1@slotsync.demo` with password `De
 | `MAX_ADVANCE_DAYS` | No | `14` | Advance booking window |
 | `QUOTA_STUDENT` | No | `3` | Daily slot limit for students |
 | `QUOTA_FACULTY` | No | `6` | Daily slot limit for faculty |
-| `ANTHROPIC_API_KEY` | No | `sk-ant-...` | Optional AI booking parser |
 
 ### Frontend (`frontend/vite-project/.env`)
 | Variable | Required | Example |
@@ -194,35 +210,30 @@ Log in using `admin@slotsync.demo` or `student1@slotsync.demo` with password `De
 ## 9. Deployment
 - **Backend on Render**: Root Directory: `backend`, Build: `npm install`, Start: `npm start`. Set `NODE_ENV=production` and `CLIENT_URL` to Vercel URL.
 - **Frontend on Vercel**: Root Directory: `frontend/vite-project`, Build: `npm run build`, Output: `dist`. Set `VITE_API_URL` to Render backend URL.
-- Include `vercel.json` SPA rewrite so client-side routes don't 404 on refresh.
 
 ---
 
-## 10. Testing
-Run the backend test suite (uses `mongodb-memory-server`):
+## 10. Testing Suite (93 Tests)
+Run the backend test suite:
 ```bash
 cd backend
 npm test
 ```
 
 ### Test Coverage Highlights:
-- **Concurrency**: 10 simultaneous requests for the same slot result in exactly 1 success (201) and 9 conflict errors (409 `SLOT_TAKEN`).
-- **Validation**: Past slots, non-operating hours, blackout dates, advance windows, and role quotas.
-- **Approval**: Pending state on restricted rooms, approval, rejection, and slot expiry.
-- **Waitlist**: FIFO order, ineligible user skipping, and auto-promotion.
-- **Scheduler**: Idempotent reconciliation and automated no-show releases.
-- **Authorization**: 401 unauthenticated, 403 unauthorized role enforcement.
+- **Concurrency & Race Conditions**: 10 simultaneous requests for the same slot result in exactly 1 success (201) and 9 conflicts (409 `SLOT_TAKEN`).
+- **Multi-Hour Batch Booking**: All-or-nothing atomicity, compensating rollback on partial failure, quota enforcement.
+- **Smart Alternatives & Release Rate**: Ranking formula with building bonus, capacity penalty, equipment superset, and release percentage.
+- **Reminders & iCalendar**: Idempotent reminder dispatching and RFC 5545 `.ics` export validation.
+- **Admin Audit Trail**: Immutable logging across approvals, cancellations, room modifications, and role updates.
+- **Analytics Upgrades**: 7x24 demand heatmap, period deltas, rule-based insights, and CSV streaming.
+- **Waitlists & No-Show Release**: FIFO queues, skip logic, and automated room reassignment.
 
 ---
 
-## 11. Security
+## 11. Security & Compliance
 - Passwords hashed with `bcryptjs` (salt rounds 10).
 - JWT transmitted exclusively in `httpOnly`, `SameSite` cookies.
 - Helmet security headers, rate limiting on authentication routes, and strict CORS.
 - All request bodies and query parameters validated via Zod schemas.
-
----
-
-## 12. Known Limitations
-- Slots are atomic 1-hour durations (multi-hour bookings require booking adjacent slots).
-- Free-tier Render server spins down after idle periods; lazy reconcile handles state synchronization upon wake.
+- Administrators protected with self-demote prevention.
