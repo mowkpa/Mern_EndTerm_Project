@@ -58,6 +58,35 @@ export default function Search() {
   const [activeWaitlistSlot, setActiveWaitlistSlot] = useState(null);
   const [waitlistLoading, setWaitlistLoading] = useState(false);
 
+  // AI Assistant State
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiResponseMsg, setAiResponseMsg] = useState(null);
+
+  const handleAiSearch = async (e) => {
+    e.preventDefault();
+    if (!aiPrompt.trim()) return;
+    try {
+      setAiLoading(true);
+      setAiResponseMsg(null);
+      const res = await api.post('/ai/parse', { prompt: aiPrompt.trim() });
+      if (res.data.parsed) {
+        const { date: pDate, capacity: pCap, startHour: pStart, equipment: pEq } = res.data.parsed;
+        if (pDate) setDate(pDate);
+        if (pCap) setCapacity(String(pCap));
+        if (pStart !== undefined && pStart !== null) setStartHour(String(pStart));
+        if (Array.isArray(pEq) && pEq.length > 0) setSelectedEquipment(pEq);
+        addToast('Applied AI filters!', 'success');
+      } else {
+        setAiResponseMsg(res.data.message || 'AI assistant is not configured on this instance.');
+      }
+    } catch (err) {
+      setAiResponseMsg(err.response?.data?.message || 'Failed to query AI assistant');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   const equipmentOptions = [
     { id: 'computers', label: 'Computers' },
     { id: 'projector', label: 'Projector' },
@@ -225,6 +254,48 @@ export default function Search() {
             />
           </div>
         </div>
+
+        {/* AI Booking Assistant Prompt Bar */}
+        <form onSubmit={handleAiSearch} className="bg-gradient-to-r from-primary-50 via-indigo-50/50 to-purple-50 p-3.5 rounded-xl border border-primary-100 flex flex-col sm:flex-row gap-2.5 items-center">
+          <div className="flex items-center gap-2 text-primary-700 font-semibold text-xs shrink-0">
+            <Sparkles className="w-4 h-4 text-primary-600 animate-pulse" />
+            <span>AI Assistant:</span>
+          </div>
+          <div className="relative flex-1 w-full">
+            <input
+              type="text"
+              value={aiPrompt}
+              onChange={(e) => setAiPrompt(e.target.value)}
+              placeholder="e.g., 'Need a lab for 30 students with computers tomorrow at 2 PM'"
+              className="w-full text-xs sm:text-sm bg-white border border-primary-200 rounded-lg px-3.5 py-2 text-slate-800 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-primary-500 shadow-2xs"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={aiLoading || !aiPrompt.trim()}
+            className="w-full sm:w-auto px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 shrink-0"
+          >
+            {aiLoading ? <Spinner size="sm" className="text-white" /> : <Sparkles className="w-3.5 h-3.5" />}
+            Parse Intent
+          </button>
+        </form>
+
+        {aiResponseMsg && (
+          <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 text-amber-800 p-3 rounded-lg text-xs">
+            <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <span className="font-semibold">Notice: </span>
+              {aiResponseMsg}
+            </div>
+            <button
+              type="button"
+              onClick={() => setAiResponseMsg(null)}
+              className="text-amber-600 hover:text-amber-800 font-bold ml-2"
+            >
+              ×
+            </button>
+          </div>
+        )}
 
         {/* Filter controls */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-center">
