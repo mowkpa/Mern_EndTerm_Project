@@ -1,5 +1,6 @@
 import {
   createBooking,
+  createBatchBooking,
   approveBooking,
   rejectBooking,
   getPendingApprovals,
@@ -22,6 +23,20 @@ export const create = async (req, res) => {
   });
 
   res.status(201).json({ booking });
+};
+
+export const createBatch = async (req, res) => {
+  const { roomId, date, slots, purpose } = req.body;
+
+  const result = await createBatchBooking({
+    user: req.user,
+    roomId,
+    date,
+    slots,
+    purpose,
+  });
+
+  res.status(201).json(result);
 };
 
 export const getMyBookings = async (req, res) => {

@@ -64,6 +64,7 @@ export default function Search() {
   const [bookingDrawerOpen, setBookingDrawerOpen] = useState(false);
   const [activeBookingRoom, setActiveBookingRoom] = useState(null);
   const [activeBookingSlot, setActiveBookingSlot] = useState(null);
+  const [selectedRange, setSelectedRange] = useState(null);
   const [bookingLoading, setBookingLoading] = useState(false);
   const [bookingError, setBookingError] = useState(null);
   const [bookingErrorCode, setBookingErrorCode] = useState(null);
@@ -190,6 +191,7 @@ export default function Search() {
   const handleOpenBooking = (room, slotObj) => {
     setActiveBookingRoom(room);
     setActiveBookingSlot(slotObj.slot);
+    setSelectedRange({ roomId: room._id, date, slots: [slotObj.slot] });
     setBookingError(null);
     setBookingErrorCode(null);
     setBookingDrawerOpen(true);
@@ -203,26 +205,35 @@ export default function Search() {
   };
 
   const handleConfirmBooking = async (purpose, slotsToBook) => {
-    if (!activeBookingRoom || activeBookingSlot === null) return;
+    if (!activeBookingRoom || !slotsToBook || slotsToBook.length === 0) return;
     try {
       setBookingLoading(true);
       setBookingError(null);
       setBookingErrorCode(null);
 
-      // Single slot booking for milestone E2
-      const res = await api.post('/bookings', {
-        roomId: activeBookingRoom._id,
-        date,
-        slot: activeBookingSlot,
-        purpose,
-      });
+      const isMulti = slotsToBook.length > 1;
+      const res = isMulti
+        ? await api.post('/bookings/batch', {
+            roomId: activeBookingRoom._id,
+            date,
+            slots: slotsToBook,
+            purpose,
+          })
+        : await api.post('/bookings', {
+            roomId: activeBookingRoom._id,
+            date,
+            slot: slotsToBook[0],
+            purpose,
+          });
 
       setBookingDrawerOpen(false);
-      const isPending = res.data.booking?.status === 'pending';
+      setSelectedRange(null);
+      const isPending = activeBookingRoom.requiresApproval;
+      const rangeText = formatSlotRange(slotsToBook[0], slotsToBook[slotsToBook.length - 1] + 1);
       addToast(
         isPending
           ? 'Request sent. You will be notified when an admin decides.'
-          : `Booked: ${activeBookingRoom.name}, Slot ${activeBookingSlot}:00`,
+          : `Booked: ${activeBookingRoom.name}, ${rangeText}`,
         'success'
       );
       fetchAvailability();
@@ -559,6 +570,8 @@ export default function Search() {
           endHour={Number(endHour)}
           onSelectFreeSlot={handleOpenBooking}
           onSelectBookedSlot={handleOpenTakenSlot}
+          selectedRange={selectedRange}
+          onRangeSelect={setSelectedRange}
         />
       ) : (
         <RoomListView
@@ -571,10 +584,20 @@ export default function Search() {
       {/* Booking Drawer */}
       <BookingDrawer
         isOpen={bookingDrawerOpen}
-        onClose={() => setBookingDrawerOpen(false)}
+        onClose={() => {
+          setBookingDrawerOpen(false);
+          setSelectedRange(null);
+        }}
         room={activeBookingRoom}
         date={date}
         slot={activeBookingSlot}
+        selectedSlots={
+          selectedRange && selectedRange.roomId === activeBookingRoom?._id
+            ? selectedRange.slots
+            : activeBookingSlot !== null
+            ? [activeBookingSlot]
+            : []
+        }
         onSubmit={handleConfirmBooking}
         isLoading={bookingLoading}
         error={bookingError}
