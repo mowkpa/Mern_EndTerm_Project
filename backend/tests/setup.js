@@ -6,6 +6,7 @@ import { User } from '../src/models/user.model.js';
 import { Room } from '../src/models/room.model.js';
 import { Booking } from '../src/models/booking.model.js';
 import { Blackout } from '../src/models/blackout.model.js';
+import { Waitlist } from '../src/models/waitlist.model.js';
 
 let mongoServer;
 
@@ -20,6 +21,7 @@ beforeAll(async () => {
     Room.init(),
     Booking.init(),
     Blackout.init(),
+    Waitlist.init(),
   ]);
 });
 
