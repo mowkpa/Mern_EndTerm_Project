@@ -1,11 +1,11 @@
-﻿# SlotSync
+# SlotSync
 
 A smart campus room and lab booking system with timetable board, multi-hour range booking, automated waitlists, no-show release, smart alternatives, admin audit trail, and operational analytics.
 
 | Detail | Information |
 |---|---|
 | **Author** | SlotSync Engineering Team |
-| **Live application** | [https://slotsync.vercel.app](https://slotsync.vercel.app) |
+| **Live application** | [https://vite-project-sandy-one.vercel.app](https://vite-project-sandy-one.vercel.app) |
 | **Backend API** | [https://slotsync-api.onrender.com](https://slotsync-api.onrender.com) (health check: `/health`) |
 | **Full design spec** | [SPEC.md](SPEC.md) & [ENHANCE.md](ENHANCE.md) |
 | **Architectural decisions** | [docs/DECISIONS.md](docs/DECISIONS.md) |
