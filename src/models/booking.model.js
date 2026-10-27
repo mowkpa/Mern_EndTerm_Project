@@ -79,6 +79,16 @@ const bookingSchema = new mongoose.Schema(
     endsAt: {
       type: Date,
     },
+    batchId: {
+      type: String,
+      default: null,
+      index: true,
+    },
+    reminderSentAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
   },
   {
     timestamps: true,

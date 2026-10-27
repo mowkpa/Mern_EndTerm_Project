@@ -145,6 +145,8 @@ export const createBooking = async ({
   purpose,
   fromWaitlist = false,
   now = new Date(),
+  batchId = null,
+  skipAdminNotification = false,
 }) => {
   // 1. Validate date format and slot number
   if (!isValidDateString(date) || !Number.isInteger(slot) || slot < 0 || slot > 23) {
@@ -223,6 +225,7 @@ export const createBooking = async ({
       startsAt,
       endsAt,
       fromWaitlist,
+      batchId,
     });
 
     // Populate for response
@@ -238,7 +241,7 @@ export const createBooking = async ({
       });
     }
 
-    if (status === 'pending') {
+    if (status === 'pending' && !skipAdminNotification) {
       await notifyAdmins('approval_requested', `New approval request for ${room.name} by ${user.name}`, booking._id);
     }
 
@@ -341,3 +344,103 @@ export const checkIn = async (id, user, now = new Date()) => {
 
   return updated;
 };
+
+/**
+ * Creates a batch of consecutive slot bookings (1 to 4 hours) with all-or-nothing compensation.
+ */
+export const createBatchBooking = async ({
+  user,
+  roomId,
+  date,
+  slots,
+  purpose,
+  now = new Date(),
+}) => {
+  // 1. Validate slots: 1 to 4 consecutive integers
+  if (!Array.isArray(slots) || slots.length < 1 || slots.length > 4) {
+    throw httpError(400, 'Slots must be an array of 1 to 4 consecutive hours');
+  }
+
+  // Ensure consecutive sorted integers
+  for (let i = 0; i < slots.length; i++) {
+    if (!Number.isInteger(slots[i]) || slots[i] < 0 || slots[i] > 23) {
+      throw httpError(400, 'Each slot must be an integer between 0 and 23');
+    }
+    if (i > 0 && slots[i] !== slots[i - 1] + 1) {
+      throw httpError(400, 'Requested slots must be consecutive hours');
+    }
+  }
+
+  // 2. Validate room exists & is active
+  const room = await Room.findById(roomId);
+  if (!room || !room.isActive) {
+    throw httpError(404, 'Room is not available');
+  }
+
+  // 3. Upfront quota check for entire range
+  const userRole = user.role || 'student';
+  if (userRole !== 'admin') {
+    const quotaLimit = userRole === 'faculty' ? env.QUOTA_FACULTY : env.QUOTA_STUDENT;
+    const activeCount = await Booking.countDocuments({
+      user: user._id,
+      date,
+      holdsSlot: true,
+    });
+
+    if (activeCount + slots.length > quotaLimit) {
+      throw httpError(
+        409,
+        `Booking ${slots.length} slots would exceed your daily quota of ${quotaLimit} slots (currently holding ${activeCount})`
+      );
+    }
+  }
+
+  const batchId = `batch_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  const createdBookings = [];
+
+  try {
+    for (const slot of slots) {
+      const booking = await createBooking({
+        user,
+        roomId,
+        date,
+        slot,
+        purpose,
+        now,
+        batchId,
+        skipAdminNotification: true,
+      });
+      createdBookings.push(booking);
+    }
+  } catch (error) {
+    // Compensation: delete any bookings already created in this request
+    if (createdBookings.length > 0) {
+      const createdIds = createdBookings.map((b) => b._id);
+      await Booking.deleteMany({ _id: { $in: createdIds } });
+
+      const io = getIO();
+      if (io) {
+        for (const b of createdBookings) {
+          io.to(`date:${date}`).emit('availability:changed', {
+            roomId,
+            date,
+            slot: b.slot,
+          });
+        }
+      }
+    }
+    throw error;
+  }
+
+  // Single admin notification if room needs approval
+  if (room.requiresApproval && createdBookings.length > 0) {
+    await notifyAdmins(
+      'approval_requested',
+      `New approval request for ${room.name} (${slots.length}-hour block: Slots ${slots[0]}:00 - ${slots[slots.length - 1] + 1}:00) by ${user.name}`,
+      createdBookings[0]._id
+    );
+  }
+
+  return { batchId, bookings: createdBookings };
+};
+

@@ -25,3 +25,13 @@ export const bookingByIdSchema = {
     id: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid booking ID'),
   }),
 };
+
+export const batchBookingSchema = {
+  body: z.object({
+    roomId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid room ID'),
+    date: z.string().refine(isValidDateString, 'Invalid date format. Expected YYYY-MM-DD'),
+    slots: z.array(z.number().int().min(0).max(23)).min(1, 'At least 1 slot required').max(4, 'Maximum 4 consecutive slots allowed'),
+    purpose: z.string().trim().min(3, 'Purpose must be at least 3 characters').max(200, 'Purpose cannot exceed 200 characters'),
+  }),
+};
+

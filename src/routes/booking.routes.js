@@ -1,6 +1,7 @@
 import express from 'express';
 import {
   create,
+  createBatch,
   getMyBookings,
   getBookingById,
   approve,
@@ -11,12 +12,17 @@ import {
 import { protect } from '../middlewares/auth.middleware.js';
 import { requireRole } from '../middlewares/role.middleware.js';
 import { validate } from '../middlewares/validate.middleware.js';
-import { createBookingSchema, bookingByIdSchema } from '../validators/booking.validator.js';
+import {
+  createBookingSchema,
+  batchBookingSchema,
+  bookingByIdSchema,
+} from '../validators/booking.validator.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
 const router = express.Router();
 
 router.post('/', protect, validate(createBookingSchema), asyncHandler(create));
+router.post('/batch', protect, validate(batchBookingSchema), asyncHandler(createBatch));
 router.get('/mine', protect, asyncHandler(getMyBookings));
 router.get('/:id', protect, validate(bookingByIdSchema), asyncHandler(getBookingById));
 
