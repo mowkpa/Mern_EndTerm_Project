@@ -6,6 +6,7 @@ import { httpError } from '../utils/httpError.js';
 import { slotStart, slotEnd, todayIST, addDaysIST, isValidDateString } from '../utils/time.js';
 import { notify, notifyAdmins } from './notification.service.js';
 import { getIO } from '../socket.js';
+import { logAudit } from './audit.service.js';
 
 export const TRANSITIONS = {
   pending: ['approved', 'rejected', 'cancelled', 'expired'],
@@ -87,6 +88,20 @@ export const approveBooking = async (id, admin, now = new Date()) => {
   );
   await notifyAdmins('approval_decided', `Booking ${updated._id} approved by ${admin.name}`, updated._id);
 
+  await logAudit({
+    actor: admin._id,
+    action: 'approve',
+    targetType: 'Booking',
+    targetId: updated._id,
+    summary: `${admin.name || 'Admin'} approved booking for ${updated.room?.name || 'room'} on ${updated.date} (${updated.slot}:00)`,
+    meta: {
+      roomId: updated.room?._id || updated.room,
+      date: updated.date,
+      slot: updated.slot,
+      userId: updated.user?._id || updated.user,
+    },
+  });
+
   return updated;
 };
 
@@ -115,6 +130,21 @@ export const rejectBooking = async (id, admin, note = '', now = new Date()) => {
     updated._id
   );
   await notifyAdmins('approval_decided', `Booking ${updated._id} rejected by ${admin.name}`, updated._id);
+
+  await logAudit({
+    actor: admin._id,
+    action: 'reject',
+    targetType: 'Booking',
+    targetId: updated._id,
+    summary: `${admin.name || 'Admin'} rejected booking for ${updated.room?.name || 'room'} on ${updated.date} (${updated.slot}:00)${note ? ': ' + note : ''}`,
+    meta: {
+      roomId: updated.room?._id || updated.room,
+      date: updated.date,
+      slot: updated.slot,
+      userId: updated.user?._id || updated.user,
+      note,
+    },
+  });
 
   // Trigger waitlist promotion if any waitlisted user is queued
   import('./waitlist.service.js')
@@ -296,6 +326,20 @@ export const cancelBooking = async (id, actor, now = new Date()) => {
       `Your booking for ${booking.room.name} on ${booking.date} (Slot ${booking.slot}:00) was cancelled by an administrator.`,
       updated._id
     );
+
+    await logAudit({
+      actor: actor._id,
+      action: 'admin_cancel',
+      targetType: 'Booking',
+      targetId: updated._id,
+      summary: `${actor.name || 'Admin'} cancelled ${booking.user?.name || 'user'}'s booking for ${booking.room?.name || 'room'} on ${booking.date} (${booking.slot}:00)`,
+      meta: {
+        roomId: booking.room?._id || booking.room,
+        date: booking.date,
+        slot: booking.slot,
+        userId: booking.user?._id || booking.user,
+      },
+    });
   }
 
   // Trigger waitlist auto-promotion

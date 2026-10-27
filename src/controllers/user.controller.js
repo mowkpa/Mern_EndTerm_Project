@@ -1,5 +1,5 @@
-import { User } from '../models/user.model.js';
-import { httpError } from '../utils/httpError.js';
+﻿import { User } from '../models/user.model.js';
+import { updateUserRoleService } from '../services/user.service.js';
 
 export const listUsers = async (req, res) => {
   const { search = '', page = 1, limit = 20 } = req.query;
@@ -32,28 +32,10 @@ export const listUsers = async (req, res) => {
 };
 
 export const updateUserRole = async (req, res) => {
-  const { role } = req.body;
-  const targetUserId = req.params.id;
-
-  if (!['student', 'faculty', 'admin'].includes(role)) {
-    throw httpError(400, 'Invalid role. Must be student, faculty, or admin');
-  }
-
-  // An admin cannot demote themselves (security invariant)
-  if (req.user._id.toString() === targetUserId && role !== 'admin') {
-    throw httpError(400, 'Administrators cannot demote their own account');
-  }
-
-  const user = await User.findById(targetUserId);
-  if (!user) {
-    throw httpError(404, 'User not found');
-  }
-
-  user.role = role;
-  await user.save();
+  const user = await updateUserRoleService(req.params.id, req.body.role, req.user);
 
   res.status(200).json({
-    message: `User role updated to ${role} successfully`,
+    message: `User role updated to ${req.body.role} successfully`,
     user,
   });
 };
