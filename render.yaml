@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: slotsync-backend
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: CLIENT_URL
+        value: https://vite-project-sandy-one.vercel.app
+      - key: JWT_SECRET
+        generateValue: true
+      - key: GRACE_MINUTES
+        value: 15
+      - key: MAX_ADVANCE_DAYS
+        value: 14
+      - key: QUOTA_STUDENT
+        value: 3
+      - key: QUOTA_FACULTY
+        value: 6
+      - key: ALLOW_IN_MEMORY_DB
+        value: "true"
