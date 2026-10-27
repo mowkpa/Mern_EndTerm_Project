@@ -5,6 +5,8 @@ import {
   getBookingById,
   approve,
   reject,
+  cancel,
+  checkInBooking,
 } from '../controllers/booking.controller.js';
 import { protect } from '../middlewares/auth.middleware.js';
 import { requireRole } from '../middlewares/role.middleware.js';
@@ -17,6 +19,10 @@ const router = express.Router();
 router.post('/', protect, validate(createBookingSchema), asyncHandler(create));
 router.get('/mine', protect, asyncHandler(getMyBookings));
 router.get('/:id', protect, validate(bookingByIdSchema), asyncHandler(getBookingById));
+
+// Cancellation and Check-in
+router.post('/:id/cancel', protect, validate(bookingByIdSchema), asyncHandler(cancel));
+router.post('/:id/check-in', protect, validate(bookingByIdSchema), asyncHandler(checkInBooking));
 
 // Admin approval actions
 router.post('/:id/approve', protect, requireRole('admin'), validate(bookingByIdSchema), asyncHandler(approve));

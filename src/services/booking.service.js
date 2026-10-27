@@ -255,3 +255,83 @@ export const createBooking = async ({
     throw error;
   }
 };
+
+/**
+ * Cancel a booking (Owner before start, or Admin anytime)
+ */
+export const cancelBooking = async (id, actor, now = new Date()) => {
+  const booking = await Booking.findById(id).populate('room user');
+  if (!booking) {
+    throw httpError(404, 'Booking not found');
+  }
+
+  const isOwner = booking.user._id.toString() === actor._id.toString();
+  const isAdmin = actor.role === 'admin';
+
+  if (!isOwner && !isAdmin) {
+    throw httpError(403, 'Forbidden: You cannot cancel another user\'s booking');
+  }
+
+  if (isOwner && !isAdmin && booking.startsAt <= now) {
+    throw httpError(409, 'Cannot cancel a booking after its time slot has started. Contact an administrator.');
+  }
+
+  const updated = await transitionBooking(id, ['pending', 'approved'], 'cancelled', {
+    cancelledBy: actor._id,
+  });
+
+  if (isAdmin && !isOwner) {
+    await notify(
+      booking.user._id,
+      'booking_cancelled_by_admin',
+      `Your booking for ${booking.room.name} on ${booking.date} (Slot ${booking.slot}:00) was cancelled by an administrator.`,
+      updated._id
+    );
+  }
+
+  // Trigger waitlist auto-promotion
+  import('./waitlist.service.js')
+    .then((m) => m.promoteNext && m.promoteNext(updated.room._id, updated.date, updated.slot, now))
+    .catch(() => {});
+
+  return updated;
+};
+
+/**
+ * Check into an approved booking within the valid grace window
+ */
+export const checkIn = async (id, user, now = new Date()) => {
+  const booking = await Booking.findById(id).populate('room user');
+  if (!booking) {
+    throw httpError(404, 'Booking not found');
+  }
+
+  const isOwner = booking.user._id.toString() === user._id.toString();
+  if (!isOwner) {
+    throw httpError(403, 'Forbidden: You can only check into your own booking');
+  }
+
+  if (booking.status === 'checked_in') {
+    throw httpError(409, 'Already checked in');
+  }
+
+  if (booking.status !== 'approved') {
+    throw httpError(409, `Cannot check in to a booking with status "${booking.status}"`);
+  }
+
+  // Check-in window: [startsAt - 10 minutes, checkInDeadline]
+  const earlyWindowStart = new Date(booking.startsAt.getTime() - 10 * 60 * 1000);
+  if (now < earlyWindowStart) {
+    throw httpError(409, 'Check-in is only available starting 10 minutes before the slot begins');
+  }
+
+  if (now > booking.checkInDeadline) {
+    throw httpError(409, 'Check-in deadline has passed. This slot has expired or been marked as no-show');
+  }
+
+  const updated = await transitionBooking(id, 'approved', 'checked_in', {
+    checkedInAt: now,
+  });
+
+  return updated;
+};
