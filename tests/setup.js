@@ -8,6 +8,8 @@ import { Booking } from '../src/models/booking.model.js';
 import { Blackout } from '../src/models/blackout.model.js';
 import { Waitlist } from '../src/models/waitlist.model.js';
 
+import { Notification } from '../src/models/notification.model.js';
+
 let mongoServer;
 
 beforeAll(async () => {
@@ -22,6 +24,7 @@ beforeAll(async () => {
     Booking.init(),
     Blackout.init(),
     Waitlist.init(),
+    Notification.init(),
   ]);
 });
 
