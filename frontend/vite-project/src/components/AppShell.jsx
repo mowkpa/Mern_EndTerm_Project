@@ -18,6 +18,8 @@ import {
   X,
   MoreHorizontal,
   CheckCircle2,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { logoutUser } from '../store/authSlice';
 import {
@@ -43,6 +45,34 @@ export const AppShell = ({ children }) => {
 
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
+
+  const [darkMode, setDarkMode] = useState(() => {
+    try {
+      const stored = localStorage.getItem('slotsync-theme');
+      if (stored) return stored === 'dark';
+      return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      if (darkMode) {
+        document.documentElement.classList.add('dark');
+        localStorage.setItem('slotsync-theme', 'dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+        localStorage.setItem('slotsync-theme', 'light');
+      }
+    } catch {
+      // Ignore localStorage restrictions
+    }
+  }, [darkMode]);
+
+  const toggleTheme = () => {
+    setDarkMode((prev) => !prev);
+  };
 
   // Load notifications and listen to socket events
   useEffect(() => {
@@ -249,8 +279,23 @@ export const AppShell = ({ children }) => {
             </span>
           </div>
 
-          {/* Right Header: Notification Popover & Avatar */}
-          <div className="flex items-center gap-3">
+          {/* Right Header: Theme Toggle, Notification Popover & Avatar */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Theme Toggle Button */}
+            <button
+              type="button"
+              onClick={toggleTheme}
+              aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+              className="w-9 h-9 rounded-control border border-line flex items-center justify-center text-text-2 hover:text-ink hover:bg-paper transition-colors"
+            >
+              {darkMode ? (
+                <Sun className="w-4 h-4 text-amber-400" />
+              ) : (
+                <Moon className="w-4 h-4 text-slate-600" />
+              )}
+            </button>
+
             {/* Notification Bell Popover */}
             <Popover
               width="w-84 sm:w-96"
@@ -457,6 +502,20 @@ export const AppShell = ({ children }) => {
                   <Badge variant="danger" size="sm">{unreadCount} unread</Badge>
                 )}
               </NavLink>
+
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="w-full flex items-center justify-between p-2.5 rounded-control text-sm font-medium text-ink hover:bg-paper"
+              >
+                <div className="flex items-center gap-2.5">
+                  {darkMode ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-text-2" />}
+                  <span>{darkMode ? 'Light theme' : 'Dark theme'}</span>
+                </div>
+                <span className="text-xs text-text-3 font-semibold">
+                  {darkMode ? 'Active' : 'Off'}
+                </span>
+              </button>
             </div>
           </div>
         </Drawer>
