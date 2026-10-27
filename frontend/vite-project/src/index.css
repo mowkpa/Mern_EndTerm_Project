@@ -22,6 +22,10 @@
   --mine-bg: #E9E9FE;
   --danger-bg: #FDEBEC;
 
+  /* Dedicated dark slate navy sidebar & hero backgrounds */
+  --sidebar-bg: #121A2B;
+  --sidebar-border: rgba(255, 255, 255, 0.1);
+
   --font-heading: 'Bricolage Grotesque Variable', sans-serif;
   --font-body: 'Public Sans Variable', sans-serif;
 }
@@ -37,6 +41,9 @@
   --pending-bg: rgba(217, 137, 11, 0.15);
   --mine-bg: rgba(61, 59, 243, 0.18);
   --danger-bg: rgba(229, 72, 77, 0.15);
+
+  --sidebar-bg: #090E17;
+  --sidebar-border: #1E283D;
 }
 
 @layer base {
