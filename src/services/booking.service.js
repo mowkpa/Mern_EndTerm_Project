@@ -164,8 +164,15 @@ export const createBooking = async ({
 
   // 4. Past slot check
   const startsAt = slotStart(date, slot);
-  if (startsAt <= now) {
-    throw httpError(400, 'Cannot book a past slot');
+  const endsAt = slotEnd(date, slot);
+  if (fromWaitlist) {
+    if (endsAt <= now) {
+      throw httpError(400, 'Cannot book a slot that has already ended');
+    }
+  } else {
+    if (startsAt <= now) {
+      throw httpError(400, 'Cannot book a past slot');
+    }
   }
 
   // 5. Booking window check (todayIST up to MAX_ADVANCE_DAYS)
@@ -200,7 +207,6 @@ export const createBooking = async ({
   }
 
   // 8. Booking state setup
-  const endsAt = slotEnd(date, slot);
   const checkInDeadline = new Date(startsAt.getTime() + env.GRACE_MINUTES * 60 * 1000);
   const status = room.requiresApproval ? 'pending' : 'approved';
 
