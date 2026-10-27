@@ -8,6 +8,7 @@ import {
   reject,
   cancel,
   checkInBooking,
+  exportIcs,
 } from '../controllers/booking.controller.js';
 import { protect } from '../middlewares/auth.middleware.js';
 import { requireRole } from '../middlewares/role.middleware.js';
@@ -25,6 +26,7 @@ router.post('/', protect, validate(createBookingSchema), asyncHandler(create));
 router.post('/batch', protect, validate(batchBookingSchema), asyncHandler(createBatch));
 router.get('/mine', protect, asyncHandler(getMyBookings));
 router.get('/:id', protect, validate(bookingByIdSchema), asyncHandler(getBookingById));
+router.get('/:id/ics', protect, validate(bookingByIdSchema), asyncHandler(exportIcs));
 
 // Cancellation and Check-in
 router.post('/:id/cancel', protect, validate(bookingByIdSchema), asyncHandler(cancel));
