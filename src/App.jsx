@@ -25,6 +25,7 @@ import Rooms from './pages/admin/Rooms';
 import Blackouts from './pages/admin/Blackouts';
 import Users from './pages/admin/Users';
 import Analytics from './pages/admin/Analytics';
+import Activity from './pages/admin/Activity';
 import DevUiShowcase from './pages/DevUiShowcase';
 
 export default function App() {
@@ -142,6 +143,16 @@ export default function App() {
               <ProtectedRoute>
                 <RoleRoute allowedRoles={['admin']}>
                   <Analytics />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/activity"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={['admin']}>
+                  <Activity />
                 </RoleRoute>
               </ProtectedRoute>
             }

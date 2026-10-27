@@ -1,19 +1,25 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import {
-  CheckSquare,
+  ShieldCheck,
   Clock,
   Calendar,
   Building2,
-  User,
+  Users as UsersIcon,
   Check,
   X,
   AlertCircle,
+  FileText,
 } from 'lucide-react';
 import api from '../../api/axios';
 import { socket } from '../../socket';
-import { useToast } from '../../components/Toast';
-import Spinner from '../../components/Spinner';
-import EmptyState from '../../components/EmptyState';
+import { useToast } from '../../components/ui/Toast';
+import { Avatar } from '../../components/ui/Avatar';
+import { Badge } from '../../components/ui/Badge';
+import { Button } from '../../components/ui/Button';
+import { Panel } from '../../components/ui/Panel';
+import { Modal } from '../../components/ui/Modal';
+import { Skeleton } from '../../components/ui/Skeleton';
+import { EmptyState } from '../../components/ui/EmptyState';
 
 export default function Approvals() {
   const { addToast } = useToast();
@@ -41,13 +47,11 @@ export default function Approvals() {
   useEffect(() => {
     fetchApprovals();
 
-    // Listen for live approval requests / decisions
     const handleApprovalsChanged = () => {
       fetchApprovals();
     };
 
     socket.on('approvals:changed', handleApprovalsChanged);
-
     return () => {
       socket.off('approvals:changed', handleApprovalsChanged);
     };
@@ -91,161 +95,181 @@ export default function Approvals() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      <div className="pb-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      <div className="pb-4 border-b border-line flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="font-heading font-bold text-2xl sm:text-3xl text-ink tracking-tight">
-            Approvals
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="font-heading font-bold text-2xl sm:text-3xl text-ink tracking-tight">
+              Approvals
+            </h1>
+            <Badge variant="warning" size="sm">
+              {approvals.length} Pending
+            </Badge>
+          </div>
           <p className="text-xs sm:text-sm text-text-2 mt-1">
-            Review and decide on reservations for restricted labs and seminar halls.
+            Review and decide on booking requests for restricted labs, seminar halls, and studios.
           </p>
         </div>
-
-        <span className="text-xs font-semibold px-3 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-full w-fit">
-          {approvals.length} pending decision{approvals.length !== 1 ? 's' : ''}
-        </span>
       </div>
 
       {loading ? (
-        <div className="py-20 flex flex-col items-center justify-center gap-3">
-          <Spinner size="lg" />
-          <p className="text-sm font-medium text-slate-500">Checking pending requests...</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[...Array(4)].map((_, i) => (
+            <Panel key={i} className="p-5 space-y-4">
+              <div className="flex justify-between items-start">
+                <div className="space-y-2">
+                  <Skeleton className="w-32 h-5" />
+                  <Skeleton className="w-48 h-4" />
+                </div>
+                <Skeleton className="w-16 h-5 rounded-full" />
+              </div>
+              <Skeleton className="w-full h-14 rounded-xl" />
+              <div className="flex justify-end gap-2 pt-2">
+                <Skeleton className="w-20 h-8 rounded-lg" />
+                <Skeleton className="w-24 h-8 rounded-lg" />
+              </div>
+            </Panel>
+          ))}
         </div>
       ) : approvals.length === 0 ? (
         <EmptyState
-          icon={CheckSquare}
+          icon={ShieldCheck}
           title="All caught up!"
-          description="There are no pending room reservations requiring administrative review at this time."
+          description="There are currently no reservations waiting for administrative approval."
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {approvals.map((b) => {
             const slotStartHour = `${String(b.slot).padStart(2, '0')}:00`;
             const slotEndHour = `${String(b.slot + 1).padStart(2, '0')}:00`;
+            const isProcessing = actionLoadingId === b._id;
 
             return (
-              <div
+              <Panel
                 key={b._id}
-                className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col justify-between space-y-4 hover:border-slate-300 transition-all"
+                className="p-5 flex flex-col justify-between space-y-4 hover:border-slate-300 transition-all shadow-xs"
               >
-                <div>
+                <div className="space-y-3">
+                  {/* Header: Room & Pending Badge */}
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <h3 className="text-base font-bold text-slate-900">{b.room?.name}</h3>
-                      <p className="text-xs text-slate-500 flex items-center gap-1.5 mt-0.5">
-                        <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                      <h3 className="text-base font-bold text-ink">{b.room?.name}</h3>
+                      <p className="text-xs text-text-2 flex items-center gap-1.5 mt-0.5">
+                        <Building2 className="w-3.5 h-3.5 text-text-3" />
                         {b.room?.building} • Capacity: {b.room?.capacity}
                       </p>
                     </div>
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
-                      Pending
-                    </span>
+                    <Badge variant="warning" size="sm">
+                      Needs Review
+                    </Badge>
                   </div>
 
-                  {/* Requester Profile */}
-                  <div className="mt-3 p-3 rounded-xl bg-slate-50 border border-slate-200/70 text-xs space-y-1">
-                    <div className="flex items-center gap-2 font-semibold text-slate-800">
-                      <User className="w-3.5 h-3.5 text-slate-400" />
-                      {b.user?.name}
-                      <span className="text-[10px] uppercase font-bold text-slate-400">
-                        ({b.user?.role})
-                      </span>
+                  {/* Requester Profile Strip */}
+                  <div className="p-3 rounded-xl bg-slate-50 border border-line flex items-center gap-3">
+                    <Avatar name={b.user?.name} size="sm" />
+                    <div className="min-w-0 flex-1 text-xs">
+                      <div className="flex items-center gap-1.5 font-semibold text-ink">
+                        <span className="truncate">{b.user?.name}</span>
+                        <span className="text-[10px] uppercase font-bold text-text-3 px-1.5 py-0.2 bg-white rounded border border-line">
+                          {b.user?.role}
+                        </span>
+                      </div>
+                      <p className="text-text-3 truncate mt-0.5">
+                        {b.user?.email} • {b.user?.department || 'Campus Member'}
+                      </p>
                     </div>
-                    <p className="text-slate-500 pl-5">
-                      {b.user?.email} • {b.user?.department || 'General Campus'}
-                    </p>
                   </div>
 
-                  {/* Date & Time */}
-                  <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 text-slate-700 border border-slate-200 font-medium">
-                      <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                  {/* Date, Time & Purpose */}
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface text-ink border border-line font-medium">
+                      <Calendar className="w-3.5 h-3.5 text-text-3" />
                       {b.date}
                     </span>
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 text-slate-700 border border-slate-200 font-medium">
-                      <Clock className="w-3.5 h-3.5 text-slate-400" />
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface text-ink border border-line font-medium">
+                      <Clock className="w-3.5 h-3.5 text-text-3" />
                       {slotStartHour} - {slotEndHour}
                     </span>
                   </div>
 
-                  <p className="mt-3 text-xs text-slate-600">
-                    <span className="font-semibold text-slate-700">Purpose: </span>
+                  <div className="text-xs text-text-1 bg-slate-50/70 p-2.5 rounded-lg border border-slate-100">
+                    <span className="font-semibold text-ink">Purpose: </span>
                     {b.purpose}
-                  </p>
+                  </div>
                 </div>
 
-                {/* Actions */}
-                <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
-                  <button
-                    type="button"
+                {/* Inline Action Buttons */}
+                <div className="pt-3 border-t border-line flex items-center justify-end gap-2.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => handleOpenReject(b)}
-                    disabled={actionLoadingId === b._id}
-                    className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-rose-700 hover:bg-rose-50 border border-rose-200 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    disabled={isProcessing}
+                    icon={X}
+                    className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200"
                   >
-                    <X className="w-3.5 h-3.5" />
                     Reject
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
                     onClick={() => handleApprove(b._id)}
-                    disabled={actionLoadingId === b._id}
-                    className="px-4 py-1.5 rounded-lg text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 shadow-xs transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    loading={isProcessing}
+                    icon={Check}
                   >
-                    {actionLoadingId === b._id ? (
-                      <Spinner size="sm" />
-                    ) : (
-                      <Check className="w-3.5 h-3.5" />
-                    )}
                     Approve
-                  </button>
+                  </Button>
                 </div>
-              </div>
+              </Panel>
             );
           })}
         </div>
       )}
 
-      {/* Reject Modal with Note Input */}
-      {rejectModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-100 space-y-4">
-            <h3 className="text-base font-bold text-slate-900">Reject Reservation Request</h3>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Provide an optional explanation for rejecting this reservation. The requester will
-              receive a notification containing this note.
-            </p>
+      {/* Reject Modal */}
+      <Modal
+        isOpen={rejectModalOpen}
+        onClose={() => setRejectModalOpen(false)}
+        title="Reject Reservation Request"
+        size="md"
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-text-2 leading-relaxed">
+            Specify an optional rejection reason. The requester will receive a notification and see
+            this explanation on their dashboard.
+          </p>
 
-            <form onSubmit={handleConfirmReject} className="space-y-4">
-              <textarea
-                rows={3}
-                value={rejectNote}
-                onChange={(e) => setRejectNote(e.target.value)}
-                placeholder="e.g. Time conflict with departmental faculty seminar"
-                maxLength={200}
-                className="w-full text-xs rounded-xl border border-slate-300 p-3 focus:outline-hidden focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
-              />
+          <form onSubmit={handleConfirmReject} className="space-y-4">
+            <textarea
+              rows={3}
+              value={rejectNote}
+              onChange={(e) => setRejectNote(e.target.value)}
+              placeholder="e.g., Scheduled maintenance or departmental seminar taking place at this time"
+              maxLength={200}
+              className="w-full text-xs rounded-xl border border-line p-3 focus:outline-hidden focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+            />
 
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setRejectModalOpen(false)}
-                  className="px-4 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={actionLoadingId === selectedBookingForReject?._id}
-                  className="px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-xs transition-colors flex items-center gap-1.5"
-                >
-                  Confirm Rejection
-                </button>
-              </div>
-            </form>
-          </div>
+            <div className="flex justify-end gap-2.5 pt-2 border-t border-line">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setRejectModalOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="danger"
+                size="sm"
+                loading={actionLoadingId === selectedBookingForReject?._id}
+              >
+                Confirm Rejection
+              </Button>
+            </div>
+          </form>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

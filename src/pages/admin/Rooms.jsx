@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Building2,
+  DoorOpen,
   Plus,
   Edit2,
   Trash2,
@@ -8,35 +8,52 @@ import {
   Check,
   X,
   AlertTriangle,
+  Building2,
+  Users as UsersIcon,
+  Clock,
+  ShieldAlert,
+  Power,
+  Tv,
+  Presentation,
+  Wifi,
+  Sparkles,
 } from 'lucide-react';
 import api from '../../api/axios';
-import { useToast } from '../../components/Toast';
-import Spinner from '../../components/Spinner';
-import ConfirmDialog from '../../components/ConfirmDialog';
-import EmptyState from '../../components/EmptyState';
+import { useToast } from '../../components/ui/Toast';
+import { Button } from '../../components/ui/Button';
+import { Badge } from '../../components/ui/Badge';
+import { Panel } from '../../components/ui/Panel';
+import { Drawer } from '../../components/ui/Drawer';
+import { Modal } from '../../components/ui/Modal';
+import { Skeleton } from '../../components/ui/Skeleton';
+import { EmptyState } from '../../components/ui/EmptyState';
+
+const COMMON_EQUIPMENT = ['projector', 'whiteboard', 'video_conf', 'ac', 'workstations', 'podium'];
 
 export default function Rooms() {
   const { addToast } = useToast();
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [buildingFilter, setBuildingFilter] = useState('all');
 
-  // Modal State for Create / Edit
-  const [modalOpen, setModalOpen] = useState(false);
+  // Drawer State (Add / Edit)
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingRoom, setEditingRoom] = useState(null);
-  const [modalLoading, setModalLoading] = useState(false);
+  const [drawerLoading, setDrawerLoading] = useState(false);
 
   // Form Fields
   const [name, setName] = useState('');
   const [building, setBuilding] = useState('');
-  const [capacity, setCapacity] = useState(20);
-  const [equipmentInput, setEquipmentInput] = useState('');
+  const [capacity, setCapacity] = useState(30);
+  const [equipmentList, setEquipmentList] = useState([]);
+  const [customEquip, setCustomEquip] = useState('');
   const [requiresApproval, setRequiresApproval] = useState(false);
   const [openHour, setOpenHour] = useState(8);
   const [closeHour, setCloseHour] = useState(20);
   const [description, setDescription] = useState('');
 
-  // Delete State
+  // Deactivate / Delete State
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [roomToDelete, setRoomToDelete] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -61,13 +78,14 @@ export default function Rooms() {
     setEditingRoom(null);
     setName('');
     setBuilding('');
-    setCapacity(20);
-    setEquipmentInput('whiteboard, ac');
+    setCapacity(30);
+    setEquipmentList(['projector', 'whiteboard']);
+    setCustomEquip('');
     setRequiresApproval(false);
     setOpenHour(8);
     setCloseHour(20);
     setDescription('');
-    setModalOpen(true);
+    setDrawerOpen(true);
   };
 
   const handleOpenEdit = (room) => {
@@ -75,48 +93,82 @@ export default function Rooms() {
     setName(room.name);
     setBuilding(room.building);
     setCapacity(room.capacity);
-    setEquipmentInput(room.equipment?.join(', ') || '');
+    setEquipmentList(room.equipment || []);
+    setCustomEquip('');
     setRequiresApproval(room.requiresApproval);
     setOpenHour(room.openHour);
     setCloseHour(room.closeHour);
     setDescription(room.description || '');
-    setModalOpen(true);
+    setDrawerOpen(true);
+  };
+
+  const toggleEquipment = (item) => {
+    setEquipmentList((prev) =>
+      prev.includes(item) ? prev.filter((x) => x !== item) : [...prev, item]
+    );
+  };
+
+  const addCustomEquipment = (e) => {
+    e.preventDefault();
+    const clean = customEquip.trim().toLowerCase();
+    if (clean && !equipmentList.includes(clean)) {
+      setEquipmentList((prev) => [...prev, clean]);
+      setCustomEquip('');
+    }
   };
 
   const handleSaveRoom = async (e) => {
     e.preventDefault();
-    try {
-      setModalLoading(true);
-      const equipment = equipmentInput
-        .split(',')
-        .map((s) => s.trim().toLowerCase())
-        .filter(Boolean);
+    if (!name.trim() || !building.trim()) {
+      addToast('Name and building are required.', 'error');
+      return;
+    }
 
+    try {
+      setDrawerLoading(true);
       const payload = {
-        name,
-        building,
+        name: name.trim(),
+        building: building.trim(),
         capacity: Number(capacity),
-        equipment,
+        equipment: equipmentList,
         requiresApproval,
         openHour: Number(openHour),
         closeHour: Number(closeHour),
-        description,
+        description: description.trim(),
       };
 
       if (editingRoom) {
         await api.put(`/rooms/${editingRoom._id}`, payload);
-        addToast('Room updated successfully.', 'success');
+        addToast('Room details updated successfully.', 'success');
       } else {
         await api.post('/rooms', payload);
-        addToast('Room created successfully.', 'success');
+        addToast('New room registered successfully.', 'success');
       }
 
-      setModalOpen(false);
+      setDrawerOpen(false);
       fetchRooms();
     } catch (err) {
       addToast(err.response?.data?.message || 'Failed to save room', 'error');
     } finally {
-      setModalLoading(false);
+      setDrawerLoading(false);
+    }
+  };
+
+  const handleToggleActive = async (room) => {
+    try {
+      const nextActive = !room.isActive;
+      await api.put(`/rooms/${room._id}`, { isActive: nextActive });
+      addToast(
+        nextActive
+          ? `Room "${room.name}" activated.`
+          : `Room "${room.name}" deactivated.`,
+        'success'
+      );
+      setRooms((prev) =>
+        prev.map((r) => (r._id === room._id ? { ...r, isActive: nextActive } : r))
+      );
+    } catch (err) {
+      addToast(err.response?.data?.message || 'Failed to toggle room status', 'error');
     }
   };
 
@@ -131,10 +183,10 @@ export default function Rooms() {
       setDeleteLoading(true);
       const res = await api.delete(`/rooms/${roomToDelete._id}`);
       setDeleteModalOpen(false);
-      addToast(
-        `Room deactivated. ${res.data.affectedFutureBookings || 0} future bookings exist.`,
-        'success'
-      );
+      const msg = res.data.affectedFutureBookings
+        ? `Room deactivated. ${res.data.affectedFutureBookings} future bookings will be impacted.`
+        : 'Room deactivated successfully.';
+      addToast(msg, 'success');
       fetchRooms();
     } catch (err) {
       addToast(err.response?.data?.message || 'Failed to deactivate room', 'error');
@@ -143,274 +195,391 @@ export default function Rooms() {
     }
   };
 
-  const filteredRooms = rooms.filter(
-    (r) =>
+  // Distinct buildings for filter
+  const buildings = ['all', ...new Set(rooms.map((r) => r.building))];
+
+  const filteredRooms = rooms.filter((r) => {
+    const matchesSearch =
       r.name.toLowerCase().includes(search.toLowerCase()) ||
-      r.building.toLowerCase().includes(search.toLowerCase())
-  );
+      r.building.toLowerCase().includes(search.toLowerCase()) ||
+      r.equipment?.some((e) => e.toLowerCase().includes(search.toLowerCase()));
+
+    const matchesBuilding = buildingFilter === 'all' || r.building === buildingFilter;
+
+    return matchesSearch && matchesBuilding;
+  });
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      <div className="pb-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Page Header */}
+      <div className="pb-4 border-b border-line flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="font-heading font-bold text-2xl sm:text-3xl text-ink tracking-tight">
-            Rooms
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="font-heading font-bold text-2xl sm:text-3xl text-ink tracking-tight">
+              Rooms & Facilities
+            </h1>
+            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+              {rooms.length} Total
+            </span>
+          </div>
           <p className="text-xs sm:text-sm text-text-2 mt-1">
-            Configure campus rooms, capacity limits, operating hours, and approval requirements.
+            Configure room capacities, operational hours, approval policies, and equipment inventory.
           </p>
         </div>
 
-        <button
-          onClick={handleOpenCreate}
-          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 rounded-xl shadow-xs transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Add Space
-        </button>
+        <Button variant="primary" icon={Plus} onClick={handleOpenCreate}>
+          Add Room
+        </Button>
       </div>
 
-      {/* Search Input */}
-      <div className="max-w-md">
-        <div className="relative">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+      {/* Filter / Search Bar */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="w-4 h-4 text-text-3 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search by space name or building..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 text-sm bg-white rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-primary-500 transition-all"
+            placeholder="Search by room name, building, equipment..."
+            className="w-full pl-10 pr-4 py-2 text-xs rounded-xl border border-line bg-surface focus:outline-hidden focus:ring-2 focus:ring-primary-500"
           />
         </div>
+
+        <select
+          value={buildingFilter}
+          onChange={(e) => setBuildingFilter(e.target.value)}
+          className="px-3.5 py-2 text-xs rounded-xl border border-line bg-surface text-ink focus:outline-hidden focus:ring-2 focus:ring-primary-500"
+        >
+          {buildings.map((b) => (
+            <option key={b} value={b}>
+              {b === 'all' ? 'All Buildings' : b}
+            </option>
+          ))}
+        </select>
       </div>
 
+      {/* Rooms Grid / Table */}
       {loading ? (
-        <div className="py-20 flex flex-col items-center justify-center gap-3">
-          <Spinner size="lg" />
-          <p className="text-sm font-medium text-slate-500">Loading campus facilities...</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[...Array(6)].map((_, i) => (
+            <Panel key={i} className="p-5 space-y-3">
+              <Skeleton className="w-1/2 h-5" />
+              <Skeleton className="w-1/3 h-4" />
+              <div className="flex gap-2 pt-2">
+                <Skeleton className="w-16 h-4 rounded-full" />
+                <Skeleton className="w-16 h-4 rounded-full" />
+              </div>
+            </Panel>
+          ))}
         </div>
       ) : filteredRooms.length === 0 ? (
         <EmptyState
-          icon={Building2}
-          title="No spaces found"
-          description="Create a new room or adjust your search filter."
+          icon={DoorOpen}
+          title="No rooms match your filter"
+          description="Try adjusting your search criteria or register a new campus facility."
         />
       ) : (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-slate-600">
-              <thead className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                <tr>
-                  <th className="py-3.5 px-4">Space Name</th>
-                  <th className="py-3.5 px-4">Building</th>
-                  <th className="py-3.5 px-4">Capacity</th>
-                  <th className="py-3.5 px-4">Operating Hours</th>
-                  <th className="py-3.5 px-4">Approval</th>
-                  <th className="py-3.5 px-4">Status</th>
-                  <th className="py-3.5 px-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredRooms.map((r) => (
-                  <tr key={r._id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="py-3.5 px-4 font-semibold text-slate-900">{r.name}</td>
-                    <td className="py-3.5 px-4">{r.building}</td>
-                    <td className="py-3.5 px-4">{r.capacity} seats</td>
-                    <td className="py-3.5 px-4 font-mono text-xs">
-                      {String(r.openHour).padStart(2, '0')}:00 - {String(r.closeHour).padStart(2, '0')}:00
-                    </td>
-                    <td className="py-3.5 px-4">
-                      {r.requiresApproval ? (
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-                          Required
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredRooms.map((room) => (
+            <Panel
+              key={room._id}
+              className={`p-5 flex flex-col justify-between space-y-4 border transition-all ${
+                room.isActive
+                  ? 'border-line hover:border-slate-300'
+                  : 'border-slate-200 bg-slate-50/70 opacity-75'
+              }`}
+            >
+              <div>
+                {/* Header */}
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h3 className="font-heading font-bold text-base text-ink flex items-center gap-1.5">
+                      {room.name}
+                      {!room.isActive && (
+                        <span className="text-[10px] uppercase font-bold text-slate-500 bg-slate-200 px-1.5 py-0.2 rounded">
+                          Inactive
                         </span>
-                      ) : (
-                        <span className="text-[10px] font-medium text-slate-400">Direct</span>
                       )}
-                    </td>
-                    <td className="py-3.5 px-4">
+                    </h3>
+                    <p className="text-xs text-text-2 flex items-center gap-1 mt-0.5">
+                      <Building2 className="w-3.5 h-3.5 text-text-3" />
+                      {room.building}
+                    </p>
+                  </div>
+
+                  <span
+                    className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                      room.requiresApproval
+                        ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                        : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                    }`}
+                  >
+                    {room.requiresApproval ? 'Requires Approval' : 'Instant Book'}
+                  </span>
+                </div>
+
+                {/* Specs */}
+                <div className="mt-3 flex flex-wrap gap-2 text-xs text-text-2">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-paper border border-line">
+                    <UsersIcon className="w-3 h-3 text-text-3" />
+                    {room.capacity} seats
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-paper border border-line">
+                    <Clock className="w-3 h-3 text-text-3" />
+                    {room.openHour}:00 - {room.closeHour}:00
+                  </span>
+                </div>
+
+                {/* Equipment Tags */}
+                {room.equipment && room.equipment.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {room.equipment.map((eq) => (
                       <span
-                        className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                          r.isActive
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                            : 'bg-slate-100 text-slate-500 border-slate-200'
-                        }`}
+                        key={eq}
+                        className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 capitalize"
                       >
-                        {r.isActive ? 'Active' : 'Inactive'}
+                        {eq.replace('_', ' ')}
                       </span>
-                    </td>
-                    <td className="py-3.5 px-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEdit(r)}
-                          className="p-1.5 text-slate-500 hover:text-primary-600 rounded-lg hover:bg-slate-100 transition-colors"
-                          title="Edit Room"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        {r.isActive && (
-                          <button
-                            type="button"
-                            onClick={() => handleOpenDelete(r)}
-                            className="p-1.5 text-slate-500 hover:text-rose-600 rounded-lg hover:bg-slate-100 transition-colors"
-                            title="Deactivate Room"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+                    ))}
+                  </div>
+                )}
 
-      {/* Create / Edit Modal */}
-      {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-100 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-bold text-slate-900 mb-1">
-              {editingRoom ? 'Edit Space Configuration' : 'Add New Campus Space'}
-            </h3>
-            <p className="text-xs text-slate-500 mb-4">
-              Enter room details and booking rules for scheduling.
-            </p>
-
-            <form onSubmit={handleSaveRoom} className="space-y-4 text-xs font-semibold text-slate-700">
-              <div>
-                <label className="block mb-1">Room Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Advanced Robotics Lab R-102"
-                  className="w-full text-sm font-normal rounded-xl border border-slate-300 p-2.5 focus:ring-2 focus:ring-primary-500 focus:outline-hidden"
-                />
+                {room.description && (
+                  <p className="mt-3 text-xs text-text-2 line-clamp-2">{room.description}</p>
+                )}
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block mb-1">Building Location *</label>
-                  <input
-                    type="text"
-                    required
-                    value={building}
-                    onChange={(e) => setBuilding(e.target.value)}
-                    placeholder="e.g. Science Block 2nd Floor"
-                    className="w-full text-sm font-normal rounded-xl border border-slate-300 p-2.5 focus:ring-2 focus:ring-primary-500 focus:outline-hidden"
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1">Capacity (Seats) *</label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    value={capacity}
-                    onChange={(e) => setCapacity(e.target.value)}
-                    className="w-full text-sm font-normal rounded-xl border border-slate-300 p-2.5 focus:ring-2 focus:ring-primary-500 focus:outline-hidden"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block mb-1">Open Hour (0-23)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="23"
-                    value={openHour}
-                    onChange={(e) => setOpenHour(e.target.value)}
-                    className="w-full text-sm font-normal rounded-xl border border-slate-300 p-2.5 focus:ring-2 focus:ring-primary-500 focus:outline-hidden"
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1">Close Hour (1-24)</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="24"
-                    value={closeHour}
-                    onChange={(e) => setCloseHour(e.target.value)}
-                    className="w-full text-sm font-normal rounded-xl border border-slate-300 p-2.5 focus:ring-2 focus:ring-primary-500 focus:outline-hidden"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block mb-1">Equipment Tags (comma-separated)</label>
-                <input
-                  type="text"
-                  value={equipmentInput}
-                  onChange={(e) => setEquipmentInput(e.target.value)}
-                  placeholder="e.g. computers, projector, whiteboard, ac"
-                  className="w-full text-sm font-normal rounded-xl border border-slate-300 p-2.5 focus:ring-2 focus:ring-primary-500 focus:outline-hidden"
-                />
-              </div>
-
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="checkbox"
-                  id="requiresApproval"
-                  checked={requiresApproval}
-                  onChange={(e) => setRequiresApproval(e.target.checked)}
-                  className="w-4 h-4 text-primary-600 rounded-sm focus:ring-primary-500 border-slate-300"
-                />
-                <label htmlFor="requiresApproval" className="text-xs font-medium text-slate-700 cursor-pointer">
-                  Require Administrative Approval for bookings
-                </label>
-              </div>
-
-              <div>
-                <label className="block mb-1">Description</label>
-                <textarea
-                  rows={2}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Optional brief notes or equipment instructions"
-                  className="w-full text-sm font-normal rounded-xl border border-slate-300 p-2.5 focus:ring-2 focus:ring-primary-500 focus:outline-hidden"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+              {/* Actions Footer */}
+              <div className="pt-3 border-t border-line flex items-center justify-between gap-2">
                 <button
                   type="button"
-                  onClick={() => setModalOpen(false)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+                  onClick={() => handleToggleActive(room)}
+                  className={`text-xs font-medium flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition-colors ${
+                    room.isActive
+                      ? 'text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100'
+                      : 'text-slate-600 bg-slate-100 border-slate-300 hover:bg-slate-200'
+                  }`}
+                  title={room.isActive ? 'Deactivate room' : 'Activate room'}
                 >
-                  Cancel
+                  <Power className="w-3 h-3" />
+                  {room.isActive ? 'Active' : 'Disabled'}
                 </button>
-                <button
-                  type="submit"
-                  disabled={modalLoading}
-                  className="px-5 py-2 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 rounded-lg shadow-xs transition-colors flex items-center gap-2"
-                >
-                  {modalLoading && <Spinner size="sm" />}
-                  {editingRoom ? 'Update Space' : 'Create Space'}
-                </button>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={Edit2}
+                    onClick={() => handleOpenEdit(room)}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={Trash2}
+                    onClick={() => handleOpenDelete(room)}
+                    className="text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                  />
+                </div>
               </div>
-            </form>
-          </div>
+            </Panel>
+          ))}
         </div>
       )}
 
-      {/* Delete / Deactivate Confirmation */}
-      <ConfirmDialog
+      {/* Add / Edit Room Slide-over Drawer */}
+      <Drawer
+        isOpen={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        title={editingRoom ? `Edit ${editingRoom.name}` : 'Register New Room'}
+        subtitle="Manage room physical parameters, approval rules, and equipment"
+        width="max-w-lg"
+        footer={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setDrawerOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              loading={drawerLoading}
+              onClick={handleSaveRoom}
+            >
+              {editingRoom ? 'Save Changes' : 'Create Room'}
+            </Button>
+          </>
+        }
+      >
+        <form onSubmit={handleSaveRoom} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-ink mb-1">Room Name *</label>
+            <input
+              type="text"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Lab 402, Seminar Hall A"
+              className="w-full text-xs rounded-xl border border-line p-2.5 bg-surface focus:outline-hidden focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-ink mb-1">Building / Block *</label>
+            <input
+              type="text"
+              required
+              value={building}
+              onChange={(e) => setBuilding(e.target.value)}
+              placeholder="e.g. Science Block, Academic Wing"
+              className="w-full text-xs rounded-xl border border-line p-2.5 bg-surface focus:outline-hidden focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-ink mb-1">Capacity</label>
+              <input
+                type="number"
+                min={1}
+                max={500}
+                required
+                value={capacity}
+                onChange={(e) => setCapacity(e.target.value)}
+                className="w-full text-xs rounded-xl border border-line p-2.5 bg-surface focus:outline-hidden focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-ink mb-1">Open Hour</label>
+              <select
+                value={openHour}
+                onChange={(e) => setOpenHour(Number(e.target.value))}
+                className="w-full text-xs rounded-xl border border-line p-2.5 bg-surface focus:outline-hidden focus:ring-2 focus:ring-primary-500"
+              >
+                {[...Array(24)].map((_, h) => (
+                  <option key={h} value={h}>
+                    {h}:00
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-ink mb-1">Close Hour</label>
+              <select
+                value={closeHour}
+                onChange={(e) => setCloseHour(Number(e.target.value))}
+                className="w-full text-xs rounded-xl border border-line p-2.5 bg-surface focus:outline-hidden focus:ring-2 focus:ring-primary-500"
+              >
+                {[...Array(24)].map((_, h) => (
+                  <option key={h} value={h}>
+                    {h}:00
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Requires Approval Toggle */}
+          <div className="p-3 rounded-xl border border-line bg-paper/60 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-ink">Requires Admin Approval</p>
+              <p className="text-[11px] text-text-3">
+                Bookings will remain pending until an administrator approves them.
+              </p>
+            </div>
+            <input
+              type="checkbox"
+              checked={requiresApproval}
+              onChange={(e) => setRequiresApproval(e.target.checked)}
+              className="w-4 h-4 rounded text-primary-600 focus:ring-primary-500 border-line"
+            />
+          </div>
+
+          {/* Equipment Checkboxes */}
+          <div>
+            <label className="block text-xs font-semibold text-ink mb-1.5">
+              Available Equipment
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {COMMON_EQUIPMENT.map((eq) => {
+                const isSelected = equipmentList.includes(eq);
+                return (
+                  <button
+                    key={eq}
+                    type="button"
+                    onClick={() => toggleEquipment(eq)}
+                    className={`text-xs px-2.5 py-1 rounded-lg border transition-all ${
+                      isSelected
+                        ? 'bg-primary-50 border-primary-300 text-primary-800 font-medium'
+                        : 'bg-surface border-line text-text-2 hover:bg-paper'
+                    }`}
+                  >
+                    {eq.replace('_', ' ')}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex gap-2 mt-2">
+              <input
+                type="text"
+                value={customEquip}
+                onChange={(e) => setCustomEquip(e.target.value)}
+                placeholder="Add other equipment..."
+                className="flex-1 text-xs rounded-xl border border-line p-2 bg-surface"
+              />
+              <Button variant="outline" size="sm" type="button" onClick={addCustomEquipment}>
+                Add
+              </Button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-ink mb-1">Description</label>
+            <textarea
+              rows={2}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="e.g. Dual projector displays with surround sound and high-speed Wi-Fi."
+              className="w-full text-xs rounded-xl border border-line p-2.5 bg-surface focus:outline-hidden focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+        </form>
+      </Drawer>
+
+      {/* Delete / Deactivate Confirmation Modal */}
+      <Modal
         isOpen={deleteModalOpen}
-        title="Deactivate Campus Space"
-        message={`Are you sure you want to deactivate "${roomToDelete?.name}"? It will no longer be visible in directory searches.`}
-        confirmText="Deactivate"
-        isDanger={true}
-        isLoading={deleteLoading}
-        onConfirm={handleConfirmDelete}
-        onCancel={() => setDeleteModalOpen(false)}
-      />
+        onClose={() => setDeleteModalOpen(false)}
+        title={`Deactivate ${roomToDelete?.name || 'Room'}?`}
+        size="md"
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-text-2 leading-relaxed">
+            Deactivating this room will hide it from the search timetable board and prevent any new
+            bookings from being made. Historical reservations and attendance analytics will remain
+            preserved.
+          </p>
+
+          <div className="flex justify-end gap-2.5 pt-2 border-t border-line">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDeleteModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              loading={deleteLoading}
+              onClick={handleConfirmDelete}
+            >
+              Confirm Deactivation
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

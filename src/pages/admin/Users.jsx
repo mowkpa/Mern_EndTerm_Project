@@ -1,10 +1,29 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import { useSelector } from 'react-redux';
-import { Users as UsersIcon, Search, Shield, UserCheck, AlertCircle } from 'lucide-react';
+import {
+  Users as UsersIcon,
+  Search,
+  Shield,
+  UserCheck,
+  AlertCircle,
+  GraduationCap,
+  Briefcase,
+  ShieldAlert,
+} from 'lucide-react';
 import api from '../../api/axios';
-import { useToast } from '../../components/Toast';
-import Spinner from '../../components/Spinner';
-import EmptyState from '../../components/EmptyState';
+import { useToast } from '../../components/ui/Toast';
+import { Avatar } from '../../components/ui/Avatar';
+import { Badge } from '../../components/ui/Badge';
+import { Panel } from '../../components/ui/Panel';
+import { Button } from '../../components/ui/Button';
+import { Skeleton } from '../../components/ui/Skeleton';
+import { EmptyState } from '../../components/ui/EmptyState';
+
+const ROLE_BADGES = {
+  student: { variant: 'neutral', label: 'Student', quota: '3 slots / day' },
+  faculty: { variant: 'primary', label: 'Faculty', quota: '6 slots / day' },
+  admin: { variant: 'danger', label: 'Admin', quota: 'Unlimited' },
+};
 
 export default function Users() {
   const { user: currentUser } = useSelector((state) => state.auth);
@@ -55,125 +74,112 @@ export default function Users() {
     }
   };
 
-  const getQuotaLabel = (role) => {
-    switch (role) {
-      case 'student':
-        return '3 slots/day';
-      case 'faculty':
-        return '6 slots/day';
-      case 'admin':
-        return 'Unlimited';
-      default:
-        return '';
-    }
-  };
-
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      <div className="pb-4 border-b border-line">
-        <h1 className="font-heading font-bold text-2xl sm:text-3xl text-ink tracking-tight">
-          Users
-        </h1>
-        <p className="text-xs sm:text-sm text-text-2 mt-1">
-          Manage campus privileges, quotas, and role delegations for students, faculty, and
-          administrators.
-        </p>
-      </div>
-
-      {/* Search Bar */}
-      <div className="max-w-md">
-        <div className="relative">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-          <input
-            type="text"
-            placeholder="Search by name, email, or department..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 text-sm bg-white rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-primary-500 transition-all"
-          />
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      {/* Header */}
+      <div className="pb-4 border-b border-line flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="font-heading font-bold text-2xl sm:text-3xl text-ink tracking-tight">
+              User Directory & Roles
+            </h1>
+            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+              {users.length} Listed
+            </span>
+          </div>
+          <p className="text-xs sm:text-sm text-text-2 mt-1">
+            Manage campus accounts, permissions, and booking quotas for students, faculty, and administrators.
+          </p>
         </div>
       </div>
 
+      {/* Search Input */}
+      <div className="relative max-w-md">
+        <Search className="w-4 h-4 text-text-3 absolute left-3.5 top-1/2 -translate-y-1/2" />
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search users by name, email, or department..."
+          className="w-full pl-10 pr-4 py-2.5 text-xs rounded-xl border border-line bg-surface focus:outline-hidden focus:ring-2 focus:ring-primary-500"
+        />
+      </div>
+
+      {/* Users Table / List */}
       {loading ? (
-        <div className="py-20 flex flex-col items-center justify-center gap-3">
-          <Spinner size="lg" />
-          <p className="text-sm font-medium text-slate-500">Loading user directory...</p>
+        <div className="space-y-3">
+          {[...Array(5)].map((_, i) => (
+            <Panel key={i} className="p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Skeleton className="w-10 h-10 rounded-full" />
+                <div className="space-y-1.5">
+                  <Skeleton className="w-32 h-4" />
+                  <Skeleton className="w-48 h-3" />
+                </div>
+              </div>
+              <Skeleton className="w-28 h-8 rounded-lg" />
+            </Panel>
+          ))}
         </div>
       ) : users.length === 0 ? (
         <EmptyState
           icon={UsersIcon}
-          title="No users match your query"
-          description="Try searching with a different name, email, or department."
+          title="No users found"
+          description="Try searching with a different name, email, or department identifier."
         />
       ) : (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-slate-600">
-              <thead className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                <tr>
-                  <th className="py-3.5 px-4">User</th>
-                  <th className="py-3.5 px-4">Department</th>
-                  <th className="py-3.5 px-4">Booking Quota</th>
-                  <th className="py-3.5 px-4">Account Role</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {users.map((u) => {
-                  const isCurrent = u._id === currentUser._id;
-                  const isUpdating = updatingId === u._id;
+        <div className="divide-y divide-line border border-line rounded-2xl bg-surface overflow-hidden shadow-xs">
+          {users.map((u) => {
+            const isSelf = u._id === currentUser._id;
+            const isUpdating = updatingId === u._id;
+            const roleInfo = ROLE_BADGES[u.role] || ROLE_BADGES.student;
 
-                  return (
-                    <tr key={u._id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-600 text-xs shrink-0">
-                            {u.name.charAt(0)}
-                          </div>
-                          <div>
-                            <p className="font-semibold text-slate-900 flex items-center gap-1.5">
-                              {u.name}
-                              {isCurrent && (
-                                <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-normal">
-                                  You
-                                </span>
-                              )}
-                            </p>
-                            <p className="text-xs text-slate-500">{u.email}</p>
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className="py-3.5 px-4 text-xs">
-                        {u.department || <span className="text-slate-400">—</span>}
-                      </td>
-
-                      <td className="py-3.5 px-4">
-                        <span className="text-xs font-medium text-slate-700 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-md">
-                          {getQuotaLabel(u.role)}
+            return (
+              <div
+                key={u._id}
+                className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/60 transition-colors"
+              >
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <Avatar name={u.name} size="md" />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-sm text-ink truncate">{u.name}</span>
+                      {isSelf && (
+                        <span className="text-[10px] font-bold text-primary-700 bg-primary-50 border border-primary-200 px-1.5 py-0.2 rounded">
+                          You
                         </span>
-                      </td>
+                      )}
+                    </div>
+                    <p className="text-xs text-text-2 truncate mt-0.5">
+                      {u.email} • {u.department || 'General Member'}
+                    </p>
+                  </div>
+                </div>
 
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-2">
-                          <select
-                            value={u.role}
-                            disabled={isUpdating || (isCurrent && u.role === 'admin')}
-                            onChange={(e) => handleRoleChange(u, e.target.value)}
-                            className="text-xs font-semibold rounded-lg border border-slate-300 px-2.5 py-1.5 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary-500 focus:outline-hidden disabled:opacity-50 transition-colors"
-                          >
-                            <option value="student">Student</option>
-                            <option value="faculty">Faculty</option>
-                            <option value="admin">Administrator</option>
-                          </select>
-                          {isUpdating && <Spinner size="sm" />}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                {/* Role Selector & Quota */}
+                <div className="flex items-center gap-4 shrink-0 sm:self-center">
+                  <div className="text-right hidden sm:block">
+                    <p className="text-[11px] font-medium text-text-3">Daily Quota</p>
+                    <p className="text-xs font-semibold text-ink">{roleInfo.quota}</p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={u.role}
+                      disabled={isUpdating || (isSelf && u.role === 'admin')}
+                      onChange={(e) => handleRoleChange(u, e.target.value)}
+                      className="text-xs font-medium px-3 py-1.5 rounded-lg border border-line bg-surface text-ink focus:outline-hidden focus:ring-2 focus:ring-primary-500 disabled:opacity-50"
+                      title={isSelf ? 'You cannot demote your own account' : 'Assign role'}
+                    >
+                      <option value="student">Student</option>
+                      <option value="faculty">Faculty</option>
+                      <option value="admin">Administrator</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
