@@ -1,9 +1,12 @@
-import {
+﻿import {
   getAnalyticsSummary,
   getUtilizationByRoom,
   getPeakHours,
   getNoShowsBreakdown,
   getDailyTrends,
+  getDemandHeatmap,
+  getRuleBasedInsights,
+  exportBookingsCsv,
   getRoomReleaseRate,
 } from '../services/analytics.service.js';
 import { httpError } from '../utils/httpError.js';
@@ -31,6 +34,29 @@ export const noShows = async (req, res) => {
 export const daily = async (req, res) => {
   const result = await getDailyTrends(req.query.from, req.query.to);
   res.status(200).json({ daily: result });
+};
+
+export const heatmap = async (req, res) => {
+  const result = await getDemandHeatmap(req.query.from, req.query.to);
+  res.status(200).json({ heatmap: result });
+};
+
+export const insights = async (req, res) => {
+  const result = await getRuleBasedInsights(req.query.from, req.query.to);
+  res.status(200).json({ insights: result });
+};
+
+export const exportCsv = async (req, res) => {
+  const csvData = await exportBookingsCsv(req.query.from, req.query.to);
+  const fromStr = req.query.from || 'start';
+  const toStr = req.query.to || 'end';
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="slotsync-analytics-${fromStr}-to-${toStr}.csv"`
+  );
+  res.status(200).send(csvData);
 };
 
 export const roomReleaseRate = async (req, res) => {
