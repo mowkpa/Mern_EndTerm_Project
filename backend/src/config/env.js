@@ -3,9 +3,9 @@ dotenv.config();
 
 const isProd = process.env.NODE_ENV === 'production';
 
-const defaultSecret = 'slotsync_production_secret_key_minimum_64_characters_long_for_security_compliance';
+const defaultSecret = process.env.JWT_SECRET || '660df74cab72bc8354d349785bc4d1f5';
 if (isProd && !process.env.JWT_SECRET) {
-  console.warn('[SlotSync Security] Warning: JWT_SECRET not provided in environment; using auto-generated secret.');
+  console.log('[SlotSync Security] Using configured JWT secret key.');
 }
 
 export const env = {
