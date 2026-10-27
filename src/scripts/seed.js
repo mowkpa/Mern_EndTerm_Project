@@ -17,11 +17,7 @@ if (isProduction && !hasForceFlag) {
   process.exit(1);
 }
 
-const seedDatabase = async () => {
-  try {
-    console.log(`[Seed] Connecting to database...`);
-    await mongoose.connect(env.MONGODB_URI);
-    console.log(`[Seed] Connected to ${mongoose.connection.host}`);
+export const seedData = async () => {
 
     // Drop existing collections safely
     console.log('[Seed] Dropping existing SlotSync collections...');
@@ -359,7 +355,14 @@ const seedDatabase = async () => {
     console.log('  Student: student2@slotsync.demo / Demo@12345');
     console.log('  Student: student3@slotsync.demo / Demo@12345');
     console.log('--------------------------------------------------');
+};
 
+export const seedDatabase = async () => {
+  try {
+    console.log(`[Seed] Connecting to database...`);
+    await mongoose.connect(env.MONGODB_URI);
+    console.log(`[Seed] Connected to ${mongoose.connection.host}`);
+    await seedData();
     await mongoose.disconnect();
     process.exit(0);
   } catch (error) {
@@ -368,4 +371,7 @@ const seedDatabase = async () => {
   }
 };
 
-seedDatabase();
+if (process.argv[1] && (process.argv[1].endsWith('seed.js') || process.argv[1].endsWith('seed'))) {
+  seedDatabase();
+}
+
