@@ -58,6 +58,83 @@ export const transitionBooking = async (id, from, to, extra = {}) => {
 };
 
 /**
+ * Approve a pending booking (Admin only)
+ */
+export const approveBooking = async (id, admin, now = new Date()) => {
+  const booking = await Booking.findById(id);
+  if (!booking) {
+    throw httpError(404, 'Booking not found');
+  }
+
+  if (booking.status !== 'pending') {
+    throw httpError(409, `Cannot approve booking with status "${booking.status}"`);
+  }
+
+  if (booking.startsAt <= now) {
+    throw httpError(409, 'Cannot approve a booking whose time slot has already started');
+  }
+
+  const updated = await transitionBooking(id, 'pending', 'approved', {
+    decidedBy: admin._id,
+    decisionNote: '',
+  });
+
+  await notify(
+    updated.user._id,
+    'booking_approved',
+    `Your booking for ${updated.room.name} on ${updated.date} (Slot ${updated.slot}:00) was approved.`,
+    updated._id
+  );
+  await notifyAdmins('approval_decided', `Booking ${updated._id} approved by ${admin.name}`, updated._id);
+
+  return updated;
+};
+
+/**
+ * Reject a pending booking (Admin only)
+ */
+export const rejectBooking = async (id, admin, note = '', now = new Date()) => {
+  const booking = await Booking.findById(id);
+  if (!booking) {
+    throw httpError(404, 'Booking not found');
+  }
+
+  if (booking.status !== 'pending') {
+    throw httpError(409, `Cannot reject booking with status "${booking.status}"`);
+  }
+
+  const updated = await transitionBooking(id, 'pending', 'rejected', {
+    decidedBy: admin._id,
+    decisionNote: note,
+  });
+
+  await notify(
+    updated.user._id,
+    'booking_rejected',
+    `Your booking request for ${updated.room.name} was rejected.${note ? ' Note: ' + note : ''}`,
+    updated._id
+  );
+  await notifyAdmins('approval_decided', `Booking ${updated._id} rejected by ${admin.name}`, updated._id);
+
+  // Trigger waitlist promotion if any waitlisted user is queued
+  import('./waitlist.service.js')
+    .then((m) => m.promoteNext && m.promoteNext(updated.room._id, updated.date, updated.slot, now))
+    .catch(() => {});
+
+  return updated;
+};
+
+/**
+ * Get all pending bookings for admin review
+ */
+export const getPendingApprovals = async () => {
+  return Booking.find({ status: 'pending' })
+    .populate('room', 'name building capacity equipment requiresApproval openHour closeHour')
+    .populate('user', 'name email role department')
+    .sort({ date: 1, slot: 1, createdAt: 1 });
+};
+
+/**
  * Validates and creates a booking.
  */
 export const createBooking = async ({
