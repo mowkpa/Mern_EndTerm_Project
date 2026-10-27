@@ -5,6 +5,7 @@ import {
   peakHours,
   noShows,
   daily,
+  roomReleaseRate,
 } from '../controllers/analytics.controller.js';
 import { protect } from '../middlewares/auth.middleware.js';
 import { requireRole } from '../middlewares/role.middleware.js';
@@ -12,6 +13,10 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 
 const router = express.Router();
 
+// Authenticated endpoint (students & faculty can view room release rate)
+router.get('/room-release-rate', protect, asyncHandler(roomReleaseRate));
+
+// Admin-only analytics endpoints below
 router.use(protect, requireRole('admin'));
 
 router.get('/summary', asyncHandler(summary));

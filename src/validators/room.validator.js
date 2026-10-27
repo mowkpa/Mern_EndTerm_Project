@@ -38,3 +38,12 @@ export const roomByIdSchema = {
     id: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid room ID'),
   }),
 };
+
+export const alternativesQuerySchema = {
+  query: z.object({
+    roomId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid room ID'),
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be formatted as YYYY-MM-DD'),
+    slot: z.coerce.number().int().min(0).max(23),
+    capacity: z.coerce.number().int().min(1).optional(),
+  }),
+};
