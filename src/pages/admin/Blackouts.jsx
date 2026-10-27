@@ -98,11 +98,10 @@ export default function Blackouts() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       <div className="pb-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <ShieldAlert className="w-6 h-6 text-amber-500" />
-            Campus Blackout Dates
+          <h1 className="font-heading font-bold text-2xl sm:text-3xl text-ink tracking-tight">
+            Blackouts
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+          <p className="text-xs sm:text-sm text-text-2 mt-1">
             Designate campus-wide holidays or individual facility maintenance dates.
           </p>
         </div>

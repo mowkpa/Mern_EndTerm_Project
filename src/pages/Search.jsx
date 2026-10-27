@@ -234,10 +234,10 @@ export default function Search() {
       <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-              Campus Spaces Directory
+            <h1 className="font-heading font-bold text-2xl sm:text-3xl text-ink tracking-tight">
+              Find a room
             </h1>
-            <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            <p className="text-xs sm:text-sm text-text-2 mt-1">
               Live slot availability in Asia/Kolkata time with automated conflict protection.
             </p>
           </div>

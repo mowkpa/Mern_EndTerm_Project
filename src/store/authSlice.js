@@ -125,4 +125,10 @@ const authSlice = createSlice({
 });
 
 export const { clearError, resetAuth } = authSlice.actions;
+
+// Aliases for ergonomic consistency
+export const loginUser = login;
+export const registerUser = register;
+export const logoutUser = logout;
+
 export default authSlice.reducer;
