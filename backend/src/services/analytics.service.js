@@ -243,3 +243,28 @@ export const getDailyTrends = async (from, to) => {
     noShows: r.noShows,
   }));
 };
+
+/**
+ * Calculates historical release rate for a room over past 30 days:
+ * Computed as (cancelled + no_show) / total bookings.
+ * Returns { rate: number | null, sampleSize: number }.
+ * If total < 10, rate is null.
+ */
+export const getRoomReleaseRate = async (roomId, now = new Date()) => {
+  const today = todayIST(now);
+  const thirtyDaysAgo = addDaysIST(today, -30);
+
+  const bookings = await Booking.find({
+    room: roomId,
+    date: { $gte: thirtyDaysAgo, $lte: today },
+  }).select('status');
+
+  const total = bookings.length;
+  if (total < 10) {
+    return { rate: null, sampleSize: total };
+  }
+
+  const releasedCount = bookings.filter((b) => b.status === 'cancelled' || b.status === 'no_show').length;
+  const rate = Math.round((releasedCount / total) * 100);
+  return { rate, sampleSize: total };
+};

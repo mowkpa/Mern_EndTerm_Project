@@ -2,7 +2,7 @@ import { Room } from '../models/room.model.js';
 import { httpError } from '../utils/httpError.js';
 import mongoose from 'mongoose';
 import { todayIST } from '../utils/time.js';
-import { getAvailability } from '../services/availability.service.js';
+import { getAvailability, suggestAlternatives } from '../services/availability.service.js';
 
 export const getRoomAvailability = async (req, res) => {
   const result = await getAvailability({
@@ -15,6 +15,20 @@ export const getRoomAvailability = async (req, res) => {
   });
 
   res.status(200).json(result);
+};
+
+export const getAlternatives = async (req, res) => {
+  const { roomId, date, slot, capacity } = req.query;
+  const result = await suggestAlternatives({
+    roomId,
+    date,
+    slot: Number(slot),
+    capacity: capacity ? Number(capacity) : undefined,
+    user: req.user,
+    now: new Date(),
+  });
+
+  res.status(200).json({ alternatives: result });
 };
 
 export const listRooms = async (req, res) => {
