@@ -35,8 +35,11 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+import authRoutes from './routes/auth.routes.js';
+
 // Root API router placeholder - will be connected in milestones
 export const apiRouter = express.Router();
+apiRouter.use('/auth', authRoutes);
 app.use('/api', apiRouter);
 
 // 404 & Error handlers
