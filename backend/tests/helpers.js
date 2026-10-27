@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { User } from '../src/models/user.model.js';
-import { env } from '../config/env.js';
+import { env } from '../src/config/env.js';
 
 export const createTestUser = async (overrides = {}) => {
   const email = overrides.email || `user_${Date.now()}_${Math.random().toString(36).substring(7)}@slotsync.demo`;

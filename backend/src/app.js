@@ -36,10 +36,14 @@ app.get('/health', (req, res) => {
 });
 
 import authRoutes from './routes/auth.routes.js';
+import roomRoutes from './routes/room.routes.js';
+import blackoutRoutes from './routes/blackout.routes.js';
 
 // Root API router placeholder - will be connected in milestones
 export const apiRouter = express.Router();
 apiRouter.use('/auth', authRoutes);
+apiRouter.use('/rooms', roomRoutes);
+apiRouter.use('/blackouts', blackoutRoutes);
 app.use('/api', apiRouter);
 
 // 404 & Error handlers
