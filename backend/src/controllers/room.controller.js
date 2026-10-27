@@ -1,8 +1,7 @@
-import { Room } from '../models/room.model.js';
+﻿import { Room } from '../models/room.model.js';
 import { httpError } from '../utils/httpError.js';
-import mongoose from 'mongoose';
-import { todayIST } from '../utils/time.js';
 import { getAvailability, suggestAlternatives } from '../services/availability.service.js';
+import { createRoomService, updateRoomService, deleteRoomService } from '../services/room.service.js';
 
 export const getRoomAvailability = async (req, res) => {
   const result = await getAvailability({
@@ -48,58 +47,21 @@ export const getRoom = async (req, res) => {
 };
 
 export const createRoom = async (req, res) => {
-  const existing = await Room.findOne({ name: req.body.name });
-  if (existing) {
-    throw httpError(409, 'A room with this name already exists', 'ROOM_EXISTS');
-  }
-
-  const room = await Room.create(req.body);
+  const room = await createRoomService(req.body, req.user);
   res.status(201).json({ room });
 };
 
 export const updateRoom = async (req, res) => {
-  if (req.body.name) {
-    const existing = await Room.findOne({ name: req.body.name, _id: { $ne: req.params.id } });
-    if (existing) {
-      throw httpError(409, 'Another room already has this name', 'ROOM_EXISTS');
-    }
-  }
-
-  const room = await Room.findByIdAndUpdate(req.params.id, req.body, {
-    new: true,
-    runValidators: true,
-  });
-
-  if (!room) {
-    throw httpError(404, 'Room not found');
-  }
-
+  const room = await updateRoomService(req.params.id, req.body, req.user);
   res.status(200).json({ room });
 };
 
 export const deleteRoom = async (req, res) => {
-  const room = await Room.findById(req.params.id);
-  if (!room) {
-    throw httpError(404, 'Room not found');
-  }
-
-  // Soft delete
-  room.isActive = false;
-  await room.save();
-
-  // Check if any active future bookings are affected
-  let affectedBookings = 0;
-  if (mongoose.models.Booking) {
-    affectedBookings = await mongoose.models.Booking.countDocuments({
-      room: room._id,
-      holdsSlot: true,
-      date: { $gte: todayIST() },
-    });
-  }
+  const { room, affectedFutureBookings } = await deleteRoomService(req.params.id, req.user);
 
   res.status(200).json({
     message: 'Room deactivated successfully',
     room,
-    affectedFutureBookings: affectedBookings,
+    affectedFutureBookings,
   });
 };

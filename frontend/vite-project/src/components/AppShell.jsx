@@ -92,6 +92,7 @@ export const AppShell = ({ children }) => {
     { label: 'Blackouts', path: '/admin/blackouts', icon: CalendarOff },
     { label: 'Users', path: '/admin/users', icon: Users },
     { label: 'Analytics', path: '/admin/analytics', icon: BarChart3 },
+    { label: 'Activity', path: '/admin/activity', icon: Activity },
   ];
 
   // If public route or unauthenticated
