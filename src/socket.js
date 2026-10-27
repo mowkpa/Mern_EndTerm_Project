@@ -8,7 +8,12 @@ let ioInstance = null;
 
 export const initSocket = (httpServer) => {
   const allowedOrigins = Array.from(
-    new Set(['http://localhost:5173', 'http://127.0.0.1:5173', env.CLIENT_URL].filter(Boolean))
+    new Set([
+      'http://localhost:5173',
+      'http://127.0.0.1:5173',
+      'https://vite-project-sandy-one.vercel.app',
+      env.CLIENT_URL,
+    ].filter(Boolean))
   );
 
   ioInstance = new Server(httpServer, {

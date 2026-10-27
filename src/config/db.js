@@ -10,9 +10,15 @@ export const connectDB = async (uri = env.MONGODB_URI) => {
     return conn;
   } catch (error) {
     console.warn(`[SlotSync DB] Primary connection to ${uri} unavailable: ${error.message}`);
-    if (!env.isProd) {
+    const allowFallback =
+      !env.isProd ||
+      process.env.ALLOW_IN_MEMORY_DB === 'true' ||
+      !process.env.MONGODB_URI ||
+      process.env.MONGODB_URI.includes('localhost');
+
+    if (allowFallback) {
       try {
-        console.log('[SlotSync DB] Launching embedded in-memory MongoDB for zero-configuration local development...');
+        console.log('[SlotSync DB] Launching embedded in-memory MongoDB for zero-configuration deployment/development...');
         const { MongoMemoryServer } = await import('mongodb-memory-server');
         mongodInstance = await MongoMemoryServer.create();
         const memUri = mongodInstance.getUri();
