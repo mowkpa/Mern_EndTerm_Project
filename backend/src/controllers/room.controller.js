@@ -2,6 +2,20 @@ import { Room } from '../models/room.model.js';
 import { httpError } from '../utils/httpError.js';
 import mongoose from 'mongoose';
 import { todayIST } from '../utils/time.js';
+import { getAvailability } from '../services/availability.service.js';
+
+export const getRoomAvailability = async (req, res) => {
+  const result = await getAvailability({
+    date: req.query.date,
+    startHour: req.query.startHour,
+    endHour: req.query.endHour,
+    capacity: req.query.capacity,
+    equipment: req.query.equipment,
+    user: req.user,
+  });
+
+  res.status(200).json(result);
+};
 
 export const listRooms = async (req, res) => {
   const includeInactive = req.query.includeInactive === 'true' && req.user?.role === 'admin';
