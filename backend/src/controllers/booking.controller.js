@@ -3,6 +3,8 @@ import {
   approveBooking,
   rejectBooking,
   getPendingApprovals,
+  cancelBooking,
+  checkIn,
 } from '../services/booking.service.js';
 import { Booking } from '../models/booking.model.js';
 import { httpError } from '../utils/httpError.js';
@@ -86,4 +88,14 @@ export const reject = async (req, res) => {
 export const getApprovals = async (req, res) => {
   const approvals = await getPendingApprovals();
   res.status(200).json({ approvals });
+};
+
+export const cancel = async (req, res) => {
+  const booking = await cancelBooking(req.params.id, req.user);
+  res.status(200).json({ message: 'Booking cancelled successfully', booking });
+};
+
+export const checkInBooking = async (req, res) => {
+  const booking = await checkIn(req.params.id, req.user);
+  res.status(200).json({ message: 'Checked in successfully', booking });
 };
