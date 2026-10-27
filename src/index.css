@@ -1,15 +1,109 @@
+@import '@fontsource-variable/bricolage-grotesque';
+@import '@fontsource-variable/public-sans';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --ink: #121A2B;
+  --paper: #F4F6FA;
+  --surface: #FFFFFF;
+  --line: #E1E6EF;
+  --text-2: #5B667C;
+  --mine: #3D3BF3;
+  --free: #0E9F8E;
+  --pending: #D9890B;
+  --booked: #E9EDF4;
+  --danger: #E5484D;
+
+  --free-bg: #E4F6F3;
+  --pending-bg: #FFF4DB;
+  --mine-bg: #E9E9FE;
+  --danger-bg: #FDEBEC;
+
+  --font-heading: 'Bricolage Grotesque Variable', sans-serif;
+  --font-body: 'Public Sans Variable', sans-serif;
+}
+
+.dark {
+  --paper: #0D1220;
+  --surface: #151C2E;
+  --line: #25304A;
+  --ink: #F2F5FB;
+  --text-2: #94A3B8;
+  --booked: #1E293B;
+  --free-bg: rgba(14, 159, 142, 0.15);
+  --pending-bg: rgba(217, 137, 11, 0.15);
+  --mine-bg: rgba(61, 59, 243, 0.18);
+  --danger-bg: rgba(229, 72, 77, 0.15);
+}
+
+@layer base {
+  body {
+    background-color: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, .font-heading {
+    font-family: var(--font-heading);
+    letter-spacing: -0.02em;
+  }
+
+  /* Tabular figures for time numbers and counts */
+  .tabular-nums, .time-val, .count-val {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Standard focus ring */
+  *:focus-visible {
+    outline: 2px solid var(--mine);
+    outline-offset: 2px;
+  }
+}
+
 @layer utilities {
-  /* Hide scrollbar for Chrome, Safari and Opera */
+  /* Diagonal hatch pattern for blackout and pending cells */
+  .hatch-danger {
+    background: repeating-linear-gradient(
+      -45deg,
+      var(--danger-bg),
+      var(--danger-bg) 4px,
+      rgba(229, 72, 77, 0.18) 4px,
+      rgba(229, 72, 77, 0.18) 8px
+    );
+  }
+
+  .hatch-pending {
+    background: repeating-linear-gradient(
+      -45deg,
+      var(--pending-bg),
+      var(--pending-bg) 4px,
+      rgba(217, 137, 11, 0.2) 4px,
+      rgba(217, 137, 11, 0.2) 8px
+    );
+  }
+
+  /* Hide scrollbar utility */
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
-  /* Hide scrollbar for IE, Edge and Firefox */
   .no-scrollbar {
-    -ms-overflow-style: none;  /* IE and Edge */
-    scrollbar-width: none;  /* Firefox */
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
