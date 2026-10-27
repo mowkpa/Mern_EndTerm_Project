@@ -32,8 +32,10 @@ export default function Home() {
   const [nextBooking, setNextBooking] = useState(null);
   const [freeNowRooms, setFreeNowRooms] = useState([]);
   const [waitlistCount, setWaitlistCount] = useState(0);
+  const [waitlistPreview, setWaitlistPreview] = useState(null);
   const [adminSummary, setAdminSummary] = useState(null);
   const [pendingApprovals, setPendingApprovals] = useState([]);
+  const [checkInLoading, setCheckInLoading] = useState(false);
 
   // Get current hour in IST
   const getISTHour = () => {
@@ -49,61 +51,74 @@ export default function Home() {
     return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
   };
 
-  useEffect(() => {
-    const loadHomeData = async () => {
-      try {
-        setLoading(true);
-        const today = getISTDate();
-        const currentHour = getISTHour();
+  const loadHomeData = async () => {
+    try {
+      setLoading(true);
+      const today = getISTDate();
+      const currentHour = getISTHour();
 
-        if (user.role === 'admin') {
-          // Admin home: load summary & pending approvals
-          const [summaryRes, pendingRes] = await Promise.all([
-            api.get('/analytics/dashboard').catch(() => ({ data: { summary: {} } })),
-            api.get('/admin/pending').catch(() => ({ data: { pending: [] } })),
-          ]);
-          setAdminSummary(summaryRes.data?.summary || {});
-          setPendingApprovals(pendingRes.data?.pending || []);
-        } else {
-          // Student / Faculty home
-          const [bookingsRes, availRes, waitlistRes] = await Promise.all([
-            api.get('/bookings/my').catch(() => ({ data: { upcoming: [] } })),
-            api.get('/rooms/availability', { params: { date: today, startHour: currentHour, endHour: currentHour + 1 } }).catch(() => ({ data: { rooms: [] } })),
-            api.get('/waitlist/my').catch(() => ({ data: { active: [] } })),
-          ]);
+      if (user.role === 'admin') {
+        const [summaryRes, pendingRes] = await Promise.all([
+          api.get('/analytics/summary').catch(() => ({ data: {} })),
+          api.get('/admin/approvals').catch(() => ({ data: { approvals: [] } })),
+        ]);
+        setAdminSummary(summaryRes.data || {});
+        setPendingApprovals(pendingRes.data?.approvals || []);
+      } else {
+        const [bookingsRes, availRes, waitlistRes] = await Promise.all([
+          api.get('/bookings/mine', { params: { scope: 'upcoming' } }).catch(() => ({ data: { bookings: [] } })),
+          api.get('/rooms/availability', { params: { date: today, startHour: currentHour, endHour: currentHour + 1 } }).catch(() => ({ data: { rooms: [] } })),
+          api.get('/waitlist/mine').catch(() => ({ data: { entries: [] } })),
+        ]);
 
-          const upcoming = bookingsRes.data?.upcoming || [];
-          setNextBooking(upcoming.length > 0 ? upcoming[0] : null);
+        const upcoming = bookingsRes.data?.bookings || [];
+        setNextBooking(upcoming.length > 0 ? upcoming[0] : null);
 
-          // Find rooms free this hour
-          const freeRooms = (availRes.data?.rooms || []).filter((r) =>
-            r.slots?.some((s) => s.slot === currentHour && s.state === 'free')
-          );
-          setFreeNowRooms(freeRooms.slice(0, 4));
-          setWaitlistCount((waitlistRes.data?.active || []).length);
-        }
-      } catch (err) {
-        console.error('Failed to load home data', err);
-      } finally {
-        setLoading(false);
+        const freeRooms = (availRes.data?.rooms || []).filter((r) =>
+          r.slots?.some((s) => s.slot === currentHour && s.state === 'free')
+        );
+        setFreeNowRooms(freeRooms.slice(0, 4));
+
+        const wlEntries = waitlistRes.data?.entries || [];
+        setWaitlistCount(wlEntries.length);
+        setWaitlistPreview(wlEntries[0] || null);
       }
-    };
+    } catch (err) {
+      console.error('Failed to load home data', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     loadHomeData();
   }, [user]);
 
   const handleAdminDecision = async (id, action) => {
     try {
       if (action === 'approve') {
-        await api.post(`/admin/bookings/${id}/approve`);
+        await api.post(`/bookings/${id}/approve`);
         addToast('Booking approved successfully', 'success');
       } else {
-        await api.post(`/admin/bookings/${id}/reject`, { note: 'Rejected by admin' });
+        await api.post(`/bookings/${id}/reject`, { note: 'Rejected by administrator' });
         addToast('Booking rejected', 'info');
       }
       setPendingApprovals((prev) => prev.filter((p) => p._id !== id));
     } catch (err) {
       addToast(err.response?.data?.message || 'Failed to update approval', 'error');
+    }
+  };
+
+  const handleCheckInNow = async (bookingId) => {
+    try {
+      setCheckInLoading(true);
+      await api.post(`/bookings/${bookingId}/check-in`);
+      addToast('Checked in successfully! Enjoy your session.', 'success');
+      loadHomeData();
+    } catch (err) {
+      addToast(err.response?.data?.message || 'Check-in failed', 'error');
+    } finally {
+      setCheckInLoading(false);
     }
   };
 
@@ -236,45 +251,81 @@ export default function Home() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Next Up Card */}
             <Panel title="Next up" subtitle="Your next upcoming campus reservation">
-              {nextBooking ? (
-                <div className="space-y-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h4 className="font-heading font-bold text-xl text-ink">
-                        {nextBooking.room?.name}
-                      </h4>
-                      <p className="text-xs text-text-2 mt-0.5">
-                        {nextBooking.room?.building} • Slot {nextBooking.slot}:00 ({nextBooking.date})
-                      </p>
+              {nextBooking ? (() => {
+                const now = new Date();
+                const startsAt = new Date(nextBooking.startsAt);
+                const deadline = nextBooking.checkInDeadline
+                  ? new Date(nextBooking.checkInDeadline)
+                  : new Date(startsAt.getTime() + 15 * 60 * 1000);
+                const isCheckInOpen =
+                  nextBooking.status === 'approved' && now >= startsAt && now <= deadline;
+                const isCheckedIn = nextBooking.status === 'checked_in';
+
+                return (
+                  <div className="space-y-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h4 className="font-heading font-bold text-xl text-ink">
+                          {nextBooking.room?.name}
+                        </h4>
+                        <p className="text-xs text-text-2 mt-0.5">
+                          {nextBooking.room?.building} • Slot {nextBooking.slot}:00 ({nextBooking.date})
+                        </p>
+                      </div>
+                      <StatusBadge status={nextBooking.status} />
                     </div>
-                    <StatusBadge status={nextBooking.status} />
-                  </div>
 
-                  <div className="p-3 bg-paper rounded-control border border-line flex items-center justify-between">
-                    <span className="text-xs font-semibold text-text-2">Time until slot:</span>
-                    <Countdown
-                      targetDate={nextBooking.startsAt}
-                      className="text-sm font-bold text-mine"
-                    />
-                  </div>
+                    <div className="p-3 bg-paper rounded-control border border-line flex items-center justify-between">
+                      <span className="text-xs font-semibold text-text-2">
+                        {isCheckedIn ? 'Status:' : isCheckInOpen ? 'Check-in window open' : 'Starts in:'}
+                      </span>
+                      {isCheckedIn ? (
+                        <span className="text-xs font-bold text-free flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Checked in
+                        </span>
+                      ) : (
+                        <Countdown
+                          targetDate={nextBooking.startsAt}
+                          className="text-sm font-bold text-mine"
+                        />
+                      )}
+                    </div>
 
-                  <div className="flex items-center gap-3 pt-2">
-                    <Button
-                      size="sm"
-                      onClick={() => navigate('/bookings')}
-                    >
-                      View Booking Details
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => navigate('/search')}
-                    >
-                      Book another
-                    </Button>
+                    {!isCheckedIn && !isCheckInOpen && nextBooking.status === 'approved' && (
+                      <p className="text-[11px] text-text-2">
+                        Check-in opens at {startsAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.
+                      </p>
+                    )}
+
+                    <div className="flex items-center gap-3 pt-1">
+                      {isCheckInOpen && (
+                        <Button
+                          size="sm"
+                          variant="primary"
+                          onClick={() => handleCheckInNow(nextBooking._id)}
+                          isLoading={checkInLoading}
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Check in
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant={isCheckInOpen ? 'secondary' : 'primary'}
+                        onClick={() => navigate('/bookings')}
+                      >
+                        Manage
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => navigate('/search')}
+                      >
+                        Book another
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              ) : (
+                );
+              })() : (
                 <EmptyState
                   icon={Calendar}
                   title="No upcoming bookings"
@@ -332,21 +383,26 @@ export default function Home() {
               <Button
                 size="sm"
                 variant="secondary"
-                onClick={() => navigate('/search')}
+                onClick={() => navigate(`/search?startHour=${getISTHour() + 1}&endHour=${getISTHour() + 2}`)}
               >
                 Next hour
               </Button>
               <Button
                 size="sm"
                 variant="secondary"
-                onClick={() => navigate('/search')}
+                onClick={() => navigate('/search?startHour=18&endHour=21')}
               >
-                Tonight (6 PM - 8 PM)
+                Tonight (6 PM - 9 PM)
               </Button>
               <Button
                 size="sm"
                 variant="secondary"
-                onClick={() => navigate('/search')}
+                onClick={() => {
+                  const tmrw = new Date();
+                  tmrw.setDate(tmrw.getDate() + 1);
+                  const tmrwStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(tmrw);
+                  navigate(`/search?date=${tmrwStr}&startHour=9&endHour=12`);
+                }}
               >
                 Tomorrow morning
               </Button>
@@ -360,10 +416,10 @@ export default function Home() {
                 <Clock className="w-5 h-5 text-mine shrink-0" />
                 <div>
                   <span className="text-xs font-bold text-ink">
-                    You are in line for {waitlistCount} occupied slot{waitlistCount > 1 ? 's' : ''}
+                    On your waitlist ({waitlistCount}): {waitlistPreview ? `${waitlistPreview.room?.name || 'Space'}, Slot ${waitlistPreview.slot}:00` : 'active queue'}
                   </span>
                   <p className="text-xs text-text-2 mt-0.5">
-                    If someone cancels or fails to check in within 15 minutes, you will be booked automatically.
+                    If someone cancels or misses the 15-minute check-in, you will be booked automatically.
                   </p>
                 </div>
               </div>
@@ -371,6 +427,30 @@ export default function Home() {
                 View waitlist
               </Button>
             </div>
+          )}
+
+          {/* Recent Updates */}
+          {notifications && notifications.length > 0 && (
+            <Panel
+              title="Recent updates"
+              subtitle="Latest campus space notifications"
+              actions={
+                <NavLink to="/notifications" className="text-xs font-semibold text-mine hover:underline">
+                  View all →
+                </NavLink>
+              }
+            >
+              <div className="divide-y divide-line">
+                {notifications.slice(0, 3).map((notif) => (
+                  <div key={notif._id} className="py-2.5 flex items-center justify-between gap-3 text-xs">
+                    <span className="text-ink font-medium leading-relaxed">{notif.message}</span>
+                    <span className="text-text-2 shrink-0">
+                      {new Date(notif.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </Panel>
           )}
         </div>
       )}

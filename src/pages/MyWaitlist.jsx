@@ -1,12 +1,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Layers, Calendar, Clock, Building2, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Layers, Calendar, Clock, Building2, Trash2, Users } from 'lucide-react';
 import api from '../api/axios';
-import { useToast } from '../components/Toast';
-import ConfirmDialog from '../components/ConfirmDialog';
-import Spinner from '../components/Spinner';
-import EmptyState from '../components/EmptyState';
+import { useToast } from '../components/ui/Toast';
+import { Button } from '../components/ui/Button';
+import { Badge } from '../components/ui/Badge';
+import { Skeleton } from '../components/ui/Skeleton';
+import { EmptyState } from '../components/ui/EmptyState';
+import { Modal } from '../components/ui/Modal';
+import { formatSlotRange } from '../utils/time';
 
 export default function MyWaitlist() {
+  const navigate = useNavigate();
   const { addToast } = useToast();
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -52,82 +57,119 @@ export default function MyWaitlist() {
     }
   };
 
+  // Render queue dots: e.g. ●●○○ for 2nd of 4
+  const renderQueueDots = (position, total = Math.max(position, 4)) => {
+    const dots = [];
+    const count = Math.max(total, position);
+    for (let i = 1; i <= count; i++) {
+      dots.push(
+        <span
+          key={i}
+          className={`inline-block w-2.5 h-2.5 rounded-full transition-colors ${
+            i <= position ? 'bg-mine' : 'bg-line'
+          }`}
+          title={`Position ${i}`}
+        />
+      );
+    }
+    return (
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">{dots}</div>
+        <span className="text-xs font-bold text-ink tabular-nums">
+          #{position} in line
+        </span>
+      </div>
+    );
+  };
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      <div className="pb-4 border-b border-line">
-        <h1 className="font-heading font-bold text-2xl sm:text-3xl text-ink tracking-tight">
-          Waitlist queue
-        </h1>
-        <p className="text-xs sm:text-sm text-text-2 mt-1">
-          When an occupied slot is cancelled or released as a no-show, you will automatically be
-          promoted according to your queue order.
-        </p>
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      <div className="pb-4 border-b border-line flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="font-heading font-bold text-2xl sm:text-3xl text-ink tracking-tight">
+            Waitlist queue
+          </h1>
+          <p className="text-xs sm:text-sm text-text-2 mt-1">
+            When an occupied slot is cancelled or released as a no-show, you will automatically be
+            promoted according to your queue order.
+          </p>
+        </div>
+        {entries.length > 0 && (
+          <Button variant="secondary" size="sm" onClick={() => navigate('/search')}>
+            Find another room
+          </Button>
+        )}
       </div>
 
       {loading ? (
-        <div className="py-20 flex flex-col items-center justify-center gap-3">
-          <Spinner size="lg" />
-          <p className="text-sm font-medium text-slate-500">Loading your waitlist positions...</p>
+        <div className="space-y-4">
+          <Skeleton className="h-32 w-full rounded-panel" />
+          <Skeleton className="h-32 w-full rounded-panel" />
         </div>
       ) : entries.length === 0 ? (
         <EmptyState
           icon={Layers}
           title="No active waitlists"
-          description="You are not waiting for any occupied slots. You can join the waitlist on any taken slot in the space directory."
+          description="You are not on any waitlists. When a room you want is taken, you can line up for it."
+          actionLabel="Find a room"
+          onAction={() => navigate('/search')}
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {entries.map((entry) => {
-            const slotStartHour = `${String(entry.slot).padStart(2, '0')}:00`;
-            const slotEndHour = `${String(entry.slot + 1).padStart(2, '0')}:00`;
+            const timeLabel = formatSlotRange(entry.slot);
+            const position = entry.queuePosition || 1;
 
             return (
               <div
                 key={entry._id}
-                className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs hover:border-slate-300 transition-all flex flex-col justify-between space-y-4"
+                className="bg-surface rounded-panel p-5 border border-line hover:border-mine/30 transition-all flex flex-col justify-between space-y-4 shadow-2xs"
               >
                 <div>
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <h3 className="text-base font-bold text-slate-900">
+                      <h3 className="font-heading font-bold text-base text-ink">
                         {entry.room?.name || 'Campus Space'}
                       </h3>
-                      <p className="text-xs text-slate-500 flex items-center gap-1.5 mt-1">
-                        <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                        {entry.room?.building || 'Main Campus'}
+                      <p className="text-xs text-text-2 flex items-center gap-1.5 mt-0.5">
+                        <Building2 className="w-3.5 h-3.5 text-text-2/70" />
+                        {entry.room?.building || 'Main Campus'} • {entry.room?.capacity || 20} seats
                       </p>
                     </div>
 
                     <div className="text-right">
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-primary-50 text-primary-700 border border-primary-200">
-                        Queue Position: #{entry.queuePosition || 1}
-                      </span>
+                      {renderQueueDots(position, position + 2)}
                     </div>
                   </div>
 
-                  <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 text-slate-700 border border-slate-200 font-medium">
-                      <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                  <div className="mt-3.5 flex flex-wrap gap-2 text-xs">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-control bg-paper text-ink border border-line font-medium">
+                      <Calendar className="w-3.5 h-3.5 text-text-2" />
                       {entry.date}
                     </span>
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 text-slate-700 border border-slate-200 font-medium">
-                      <Clock className="w-3.5 h-3.5 text-slate-400" />
-                      {slotStartHour} - {slotEndHour}
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-control bg-paper text-ink border border-line font-medium">
+                      <Clock className="w-3.5 h-3.5 text-text-2" />
+                      {timeLabel}
                     </span>
+                  </div>
+
+                  <div className="mt-3 p-2.5 rounded-control bg-paper text-xs text-text-2 leading-relaxed">
+                    Auto-promotes immediately if the holder cancels or fails to complete check-in within the 15-minute grace period.
                   </div>
                 </div>
 
-                <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                  <span className="text-[11px] text-slate-400">
+                <div className="pt-3 border-t border-line flex items-center justify-between">
+                  <span className="text-[11px] text-text-2">
                     Joined on {new Date(entry.createdAt).toLocaleDateString()}
                   </span>
-                  <button
-                    type="button"
+                  <Button
+                    size="sm"
+                    variant="ghost"
                     onClick={() => handleOpenLeave(entry)}
-                    className="text-xs font-semibold text-rose-600 hover:text-rose-700 flex items-center gap-1 transition-colors"
+                    className="text-danger hover:bg-danger-bg hover:text-danger"
                   >
-                    <Trash2 className="w-3.5 h-3.5" /> Leave Waitlist
-                  </button>
+                    <Trash2 className="w-3.5 h-3.5 mr-1" /> Leave waitlist
+                  </Button>
                 </div>
               </div>
             );
@@ -135,17 +177,39 @@ export default function MyWaitlist() {
         </div>
       )}
 
-      {/* Leave Confirmation Dialog */}
-      <ConfirmDialog
+      {/* Leave Confirmation Modal */}
+      <Modal
         isOpen={leaveModalOpen}
-        title="Leave Waitlist"
-        message="Are you sure you want to surrender your position in the waitlist queue for this room and slot?"
-        confirmText="Leave Queue"
-        isDanger={true}
-        isLoading={leaveLoading}
-        onConfirm={handleConfirmLeave}
-        onCancel={() => setLeaveModalOpen(false)}
-      />
+        onClose={() => setLeaveModalOpen(false)}
+        title="Leave waitlist queue"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-text-2 leading-relaxed">
+            Are you sure you want to leave the waitlist queue for{' '}
+            <strong className="text-ink">{selectedEntry?.room?.name}</strong> on{' '}
+            {selectedEntry?.date} ({selectedEntry && formatSlotRange(selectedEntry.slot)})?
+          </p>
+          <p className="text-xs text-text-2 bg-paper p-3 rounded-control border border-line">
+            You will lose your queue position. If you rejoin later, you will be placed at the end of the line.
+          </p>
+          <div className="flex items-center justify-end gap-3 pt-2">
+            <Button
+              variant="secondary"
+              onClick={() => setLeaveModalOpen(false)}
+              disabled={leaveLoading}
+            >
+              Stay in queue
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleConfirmLeave}
+              isLoading={leaveLoading}
+            >
+              Yes, leave waitlist
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
