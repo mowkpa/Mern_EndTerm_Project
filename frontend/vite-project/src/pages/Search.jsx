@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSelector } from 'react-redux';
 import {
   Calendar,
@@ -6,97 +6,102 @@ import {
   Users,
   Search as SearchIcon,
   Filter,
-  CheckCircle2,
   Sparkles,
   Info,
-  ShieldAlert,
+  Layers,
+  LayoutGrid,
+  List,
+  Plus,
+  Minus,
 } from 'lucide-react';
 import api from '../api/axios';
 import { socket } from '../socket';
-import { useToast } from '../components/Toast';
-import SlotGrid from '../components/SlotGrid';
-import BookingModal from '../components/BookingModal';
-import ConfirmDialog from '../components/ConfirmDialog';
-import Spinner from '../components/Spinner';
-import EmptyState from '../components/EmptyState';
-
-// Helper to get local IST YYYY-MM-DD
-const getTodayString = () => {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
-};
-
-const getFutureDateString = (daysAhead) => {
-  const d = new Date();
-  d.setDate(d.getDate() + daysAhead);
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(d);
-};
+import { useToast } from '../components/ui/Toast';
+import { Button } from '../components/ui/Button';
+import { Popover } from '../components/ui/Popover';
+import { SegmentedControl } from '../components/ui/Tabs';
+import { Skeleton } from '../components/ui/Skeleton';
+import { EmptyState } from '../components/ui/EmptyState';
+import { ErrorState } from '../components/ui/ErrorState';
+import TimetableBoard from '../components/board/TimetableBoard';
+import RoomListView from '../components/board/RoomListView';
+import BookingDrawer from '../components/board/BookingDrawer';
+import TakenSlotDrawer from '../components/board/TakenSlotDrawer';
+import {
+  getTodayIST,
+  getTomorrowIST,
+  getAddDaysIST,
+  getISTCurrentHour,
+  formatDateLabel,
+} from '../utils/time';
 
 export default function Search() {
   const { user } = useSelector((state) => state.auth);
   const { addToast } = useToast();
 
-  const [date, setDate] = useState(getTodayString());
+  const today = getTodayIST();
+  const tomorrow = getTomorrowIST();
+  const currentHour = getISTCurrentHour();
+
+  // If fewer than 2 bookable slots remain today (past 7 PM IST), default to tomorrow
+  const isLateToday = currentHour >= 19;
+  const initialDate = isLateToday ? tomorrow : today;
+
+  const [date, setDate] = useState(initialDate);
   const [capacity, setCapacity] = useState('');
   const [startHour, setStartHour] = useState('8');
   const [endHour, setEndHour] = useState('20');
   const [selectedEquipment, setSelectedEquipment] = useState([]);
+  const [viewMode, setViewMode] = useState(
+    typeof window !== 'undefined' && window.innerWidth < 640 ? 'list' : 'board'
+  );
 
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Booking Modal State
-  const [bookingModalOpen, setBookingModalOpen] = useState(false);
+  // Booking Drawer State
+  const [bookingDrawerOpen, setBookingDrawerOpen] = useState(false);
   const [activeBookingRoom, setActiveBookingRoom] = useState(null);
   const [activeBookingSlot, setActiveBookingSlot] = useState(null);
   const [bookingLoading, setBookingLoading] = useState(false);
   const [bookingError, setBookingError] = useState(null);
   const [bookingErrorCode, setBookingErrorCode] = useState(null);
 
-  // Waitlist Dialog State
-  const [waitlistModalOpen, setWaitlistModalOpen] = useState(false);
-  const [activeWaitlistRoom, setActiveWaitlistRoom] = useState(null);
-  const [activeWaitlistSlot, setActiveWaitlistSlot] = useState(null);
+  // Taken Slot Drawer State
+  const [takenDrawerOpen, setTakenDrawerOpen] = useState(false);
+  const [activeTakenRoom, setActiveTakenRoom] = useState(null);
+  const [activeTakenSlot, setActiveTakenSlot] = useState(null);
+  const [activeTakenSlotData, setActiveTakenSlotData] = useState(null);
   const [waitlistLoading, setWaitlistLoading] = useState(false);
 
-  // AI Assistant State
+  // AI Assistant Popover State
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
-  const [aiResponseMsg, setAiResponseMsg] = useState(null);
+  const [aiNotice, setAiNotice] = useState(null);
 
-  const handleAiSearch = async (e) => {
-    e.preventDefault();
-    if (!aiPrompt.trim()) return;
-    try {
-      setAiLoading(true);
-      setAiResponseMsg(null);
-      const res = await api.post('/ai/parse', { prompt: aiPrompt.trim() });
-      if (res.data.parsed) {
-        const { date: pDate, capacity: pCap, startHour: pStart, equipment: pEq } = res.data.parsed;
-        if (pDate) setDate(pDate);
-        if (pCap) setCapacity(String(pCap));
-        if (pStart !== undefined && pStart !== null) setStartHour(String(pStart));
-        if (Array.isArray(pEq) && pEq.length > 0) setSelectedEquipment(pEq);
-        addToast('Applied AI filters!', 'success');
-      } else {
-        setAiResponseMsg(res.data.message || 'AI assistant is not configured on this instance.');
-      }
-    } catch (err) {
-      setAiResponseMsg(err.response?.data?.message || 'Failed to query AI assistant');
-    } finally {
-      setAiLoading(false);
-    }
-  };
+  const abortControllerRef = useRef(null);
 
+  // Equipment tags with labels
   const equipmentOptions = [
     { id: 'computers', label: 'Computers' },
     { id: 'projector', label: 'Projector' },
     { id: 'whiteboard', label: 'Whiteboard' },
-    { id: 'ac', label: 'Air Conditioning' },
+    { id: 'ac', label: 'AC' },
   ];
 
+  // Fetch rooms availability with debounce and request cancellation
   const fetchAvailability = useCallback(async () => {
     try {
       setLoading(true);
+      setError(null);
+
+      // Cancel ongoing request if any
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      abortControllerRef.current = new AbortController();
+
       const params = { date };
       if (capacity) params.capacity = capacity;
       if (startHour) params.startHour = startHour;
@@ -105,42 +110,55 @@ export default function Search() {
         params.equipment = selectedEquipment.join(',');
       }
 
-      const res = await api.get('/rooms/availability', { params });
-      setRooms(res.data.rooms || []);
+      const res = await api.get('/rooms/availability', {
+        params,
+        signal: abortControllerRef.current.signal,
+      });
+
+      setRooms(res.data?.rooms || []);
     } catch (err) {
-      addToast(err.response?.data?.message || 'Failed to fetch room availability', 'error');
+      if (err.name !== 'CanceledError' && err.code !== 'ERR_CANCELED') {
+        setError(err.response?.data?.message || 'Failed to fetch timetable schedules');
+      }
     } finally {
       setLoading(false);
     }
-  }, [date, capacity, startHour, endHour, selectedEquipment, addToast]);
+  }, [date, capacity, startHour, endHour, selectedEquipment]);
 
   useEffect(() => {
-    fetchAvailability();
+    const timer = setTimeout(() => {
+      fetchAvailability();
+    }, 250); // 250ms debounce
+    return () => clearTimeout(timer);
   }, [fetchAvailability]);
 
-  // Real-time Socket.IO room subscription for live slot updates
+  // Live Socket.IO single-cell availability updates
   useEffect(() => {
     if (!socket.connected) {
       socket.connect();
     }
 
-    // Watch selected date
     socket.emit('availability:watch', { date });
 
     const handleAvailabilityChanged = (data) => {
-      if (data?.date === date) {
-        // Silently refresh availability grid to avoid state drift
-        api.get('/rooms/availability', {
-          params: {
-            date,
-            capacity: capacity || undefined,
-            startHour: startHour || undefined,
-            endHour: endHour || undefined,
-            equipment: selectedEquipment.length > 0 ? selectedEquipment.join(',') : undefined,
-          },
-        }).then((res) => {
-          setRooms(res.data.rooms || []);
-        }).catch(() => {});
+      if (data?.date === date && data?.roomId && data?.slot !== undefined) {
+        // Update single slot in-place without full board re-fetch!
+        setRooms((prevRooms) =>
+          prevRooms.map((r) => {
+            if (r._id !== data.roomId) return r;
+            const updatedSlots = (r.slots || []).map((s) => {
+              if (s.slot !== data.slot) return s;
+              return {
+                ...s,
+                state: data.state || (data.status === 'pending' ? 'pending' : 'booked'),
+                waitlistCount: data.waitlistCount !== undefined ? data.waitlistCount : s.waitlistCount,
+              };
+            });
+            return { ...r, slots: updatedSlots };
+          })
+        );
+      } else if (data?.date === date) {
+        fetchAvailability();
       }
     };
 
@@ -150,7 +168,18 @@ export default function Search() {
       socket.emit('availability:unwatch', { date });
       socket.off('availability:changed', handleAvailabilityChanged);
     };
-  }, [date, capacity, startHour, endHour, selectedEquipment]);
+  }, [date, fetchAvailability]);
+
+  // Count matching rooms per equipment
+  const equipmentCounts = useMemo(() => {
+    const counts = { computers: 0, projector: 0, whiteboard: 0, ac: 0 };
+    rooms.forEach((r) => {
+      r.equipment?.forEach((eq) => {
+        if (counts[eq] !== undefined) counts[eq] += 1;
+      });
+    });
+    return counts;
+  }, [rooms]);
 
   const toggleEquipment = (tag) => {
     setSelectedEquipment((prev) =>
@@ -163,22 +192,24 @@ export default function Search() {
     setActiveBookingSlot(slotObj.slot);
     setBookingError(null);
     setBookingErrorCode(null);
-    setBookingModalOpen(true);
+    setBookingDrawerOpen(true);
   };
 
-  const handleOpenWaitlist = (room, slotObj) => {
-    setActiveWaitlistRoom(room);
-    setActiveWaitlistSlot(slotObj);
-    setWaitlistModalOpen(true);
+  const handleOpenTakenSlot = (room, slotObj) => {
+    setActiveTakenRoom(room);
+    setActiveTakenSlot(slotObj.slot);
+    setActiveTakenSlotData(slotObj);
+    setTakenDrawerOpen(true);
   };
 
-  const handleConfirmBooking = async (purpose) => {
+  const handleConfirmBooking = async (purpose, slotsToBook) => {
     if (!activeBookingRoom || activeBookingSlot === null) return;
     try {
       setBookingLoading(true);
       setBookingError(null);
       setBookingErrorCode(null);
 
+      // Single slot booking for milestone E2
       const res = await api.post('/bookings', {
         roomId: activeBookingRoom._id,
         date,
@@ -186,12 +217,12 @@ export default function Search() {
         purpose,
       });
 
-      setBookingModalOpen(false);
-      const isPending = res.data.booking.status === 'pending';
+      setBookingDrawerOpen(false);
+      const isPending = res.data.booking?.status === 'pending';
       addToast(
         isPending
-          ? 'Request submitted! Awaiting administrator approval.'
-          : 'Room booked successfully! See details in My Bookings.',
+          ? 'Request sent. You will be notified when an admin decides.'
+          : `Booked: ${activeBookingRoom.name}, Slot ${activeBookingSlot}:00`,
         'success'
       );
       fetchAvailability();
@@ -205,19 +236,19 @@ export default function Search() {
     }
   };
 
-  const handleConfirmWaitlist = async () => {
-    if (!activeWaitlistRoom || !activeWaitlistSlot) return;
+  const handleJoinWaitlist = async () => {
+    if (!activeTakenRoom || activeTakenSlot === null) return;
     try {
       setWaitlistLoading(true);
       const res = await api.post('/waitlist', {
-        roomId: activeWaitlistRoom._id,
+        roomId: activeTakenRoom._id,
         date,
-        slot: activeWaitlistSlot.slot,
+        slot: activeTakenSlot,
       });
 
-      setWaitlistModalOpen(false);
+      setTakenDrawerOpen(false);
       addToast(
-        `Added to waitlist (Queue position: #${res.data.queuePosition}). You will be auto-promoted if freed.`,
+        `You are #${res.data.queuePosition} in line. We will book it for you if it opens up.`,
         'success'
       );
       fetchAvailability();
@@ -228,273 +259,347 @@ export default function Search() {
     }
   };
 
+  const handleLeaveWaitlist = async () => {
+    if (!activeTakenSlotData?._id && !activeTakenSlotData?.waitlistId) return;
+    try {
+      setWaitlistLoading(true);
+      const id = activeTakenSlotData.waitlistId || activeTakenSlotData._id;
+      await api.delete(`/waitlist/${id}`);
+      setTakenDrawerOpen(false);
+      addToast('Left waitlist queue.', 'info');
+      fetchAvailability();
+    } catch (err) {
+      addToast(err.response?.data?.message || 'Failed to leave waitlist', 'error');
+    } finally {
+      setWaitlistLoading(false);
+    }
+  };
+
+  const handleAiParse = async (closePopover) => {
+    if (!aiPrompt.trim()) return;
+    try {
+      setAiLoading(true);
+      setAiNotice(null);
+      const res = await api.post('/ai/parse', { prompt: aiPrompt.trim() });
+      if (res.data.parsed) {
+        const { date: pDate, capacity: pCap, startHour: pStart, equipment: pEq } = res.data.parsed;
+        if (pDate) setDate(pDate);
+        if (pCap) setCapacity(String(pCap));
+        if (pStart !== undefined && pStart !== null) setStartHour(String(pStart));
+        if (Array.isArray(pEq) && pEq.length > 0) setSelectedEquipment(pEq);
+        addToast('Applied AI filters!', 'success');
+        closePopover?.();
+      } else {
+        setAiNotice(res.data.message || 'AI assistant is not configured on this instance.');
+      }
+    } catch (err) {
+      setAiNotice(err.response?.data?.message || 'Failed to query AI assistant');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      {/* Top Header & Filters Bar */}
-      <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-          <div>
-            <h1 className="font-heading font-bold text-2xl sm:text-3xl text-ink tracking-tight">
-              Find a room
-            </h1>
-            <p className="text-xs sm:text-sm text-text-2 mt-1">
-              Live slot availability in Asia/Kolkata time with automated conflict protection.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-slate-500">Date:</span>
-            <input
-              type="date"
-              value={date}
-              min={getTodayString()}
-              max={getFutureDateString(14)}
-              onChange={(e) => setDate(e.target.value)}
-              className="text-sm font-semibold text-slate-900 bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 focus:ring-2 focus:ring-primary-500 focus:outline-hidden"
-            />
-          </div>
+      {/* Page Header */}
+      <div className="pb-4 border-b border-line flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="font-heading font-bold text-2xl sm:text-3xl text-ink tracking-tight">
+            Find a room
+          </h1>
+          <p className="text-xs sm:text-sm text-text-2 mt-1">
+            Times shown in India Standard Time (IST).
+          </p>
         </div>
 
-        {/* AI Booking Assistant Prompt Bar */}
-        <form onSubmit={handleAiSearch} className="bg-gradient-to-r from-primary-50 via-indigo-50/50 to-purple-50 p-3.5 rounded-xl border border-primary-100 flex flex-col sm:flex-row gap-2.5 items-center">
-          <div className="flex items-center gap-2 text-primary-700 font-semibold text-xs shrink-0">
-            <Sparkles className="w-4 h-4 text-primary-600 animate-pulse" />
-            <span>AI Assistant:</span>
-          </div>
-          <div className="relative flex-1 w-full">
-            <input
-              type="text"
-              value={aiPrompt}
-              onChange={(e) => setAiPrompt(e.target.value)}
-              placeholder="e.g., 'Need a lab for 30 students with computers tomorrow at 2 PM'"
-              className="w-full text-xs sm:text-sm bg-white border border-primary-200 rounded-lg px-3.5 py-2 text-slate-800 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-primary-500 shadow-2xs"
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={aiLoading || !aiPrompt.trim()}
-            className="w-full sm:w-auto px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 shrink-0"
-          >
-            {aiLoading ? <Spinner size="sm" className="text-white" /> : <Sparkles className="w-3.5 h-3.5" />}
-            Parse Intent
-          </button>
-        </form>
-
-        {aiResponseMsg && (
-          <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 text-amber-800 p-3 rounded-lg text-xs">
-            <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <span className="font-semibold">Notice: </span>
-              {aiResponseMsg}
-            </div>
-            <button
-              type="button"
-              onClick={() => setAiResponseMsg(null)}
-              className="text-amber-600 hover:text-amber-800 font-bold ml-2"
-            >
-              ×
-            </button>
-          </div>
-        )}
-
-        {/* Filter controls */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-center">
-          <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">
-              Min. Capacity
-            </label>
-            <input
-              type="number"
-              min="1"
-              max="150"
-              placeholder="e.g. 10"
-              value={capacity}
-              onChange={(e) => setCapacity(e.target.value)}
-              className="w-full text-sm rounded-xl border border-slate-300 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary-500 focus:outline-hidden transition-all"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">
-              Start Hour
-            </label>
-            <select
-              value={startHour}
-              onChange={(e) => setStartHour(e.target.value)}
-              className="w-full text-sm rounded-xl border border-slate-300 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary-500 focus:outline-hidden transition-all"
-            >
-              {[8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map((h) => (
-                <option key={h} value={h}>
-                  {String(h).padStart(2, '0')}:00
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">
-              End Hour
-            </label>
-            <select
-              value={endHour}
-              onChange={(e) => setEndHour(e.target.value)}
-              className="w-full text-sm rounded-xl border border-slate-300 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary-500 focus:outline-hidden transition-all"
-            >
-              {[9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22].map((h) => (
-                <option key={h} value={h}>
-                  {String(h).padStart(2, '0')}:00
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">
-              Filter by Equipment
-            </label>
-            <div className="flex flex-wrap gap-1.5">
-              {equipmentOptions.map((eq) => {
-                const isSelected = selectedEquipment.includes(eq.id);
-                return (
-                  <button
-                    key={eq.id}
-                    type="button"
-                    onClick={() => toggleEquipment(eq.id)}
-                    className={`text-xs px-2.5 py-1 rounded-lg border font-medium transition-colors ${
-                      isSelected
-                        ? 'bg-primary-600 text-white border-primary-600 shadow-2xs'
-                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                    }`}
-                  >
-                    {eq.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* Interactive Slot Legend */}
-        <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center gap-4 text-xs text-slate-600">
-          <span className="font-semibold text-slate-700">Legend:</span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-3.5 h-3.5 rounded-sm bg-emerald-100 border border-emerald-300" />
-            Available (Free)
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-3.5 h-3.5 rounded-sm bg-primary-600 border border-primary-700" />
-            Your Booking (Mine)
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-3.5 h-3.5 rounded-sm bg-slate-200 border border-slate-300" />
-            Occupied (Join Waitlist)
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-3.5 h-3.5 rounded-sm bg-amber-100 border border-amber-300" />
-            Holiday / Blackout
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-3.5 h-3.5 rounded-sm bg-slate-100 border border-slate-200 opacity-60" />
-            Past
-          </span>
-        </div>
+        {/* Board / List View Toggle */}
+        <SegmentedControl
+          tabs={[
+            { id: 'board', label: 'Board', icon: <LayoutGrid className="w-3.5 h-3.5" /> },
+            { id: 'list', label: 'List', icon: <List className="w-3.5 h-3.5" /> },
+          ]}
+          activeTab={viewMode}
+          onChange={setViewMode}
+        />
       </div>
 
-      {/* Rooms Listing & Slot Grids */}
-      {loading ? (
-        <div className="py-20 flex flex-col items-center justify-center gap-3">
-          <Spinner size="lg" />
-          <p className="text-sm font-medium text-slate-500">Checking room schedules...</p>
-        </div>
-      ) : rooms.length === 0 ? (
-        <EmptyState
-          icon={SearchIcon}
-          title="No matching spaces found"
-          description="Try adjusting your capacity, operating hours, or equipment filters to find available rooms."
-        />
-      ) : (
-        <div className="space-y-4">
-          {rooms.map((room) => (
-            <div
-              key={room._id}
-              className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs hover:border-slate-300 transition-all space-y-4"
-            >
-              {/* Room Card Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-primary-50 text-primary-700 flex items-center justify-center font-bold text-sm shrink-0">
-                    {room.name.charAt(0)}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-base font-bold text-slate-900">{room.name}</h3>
-                      {room.requiresApproval && (
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-                          Requires Approval
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      {room.building} • Capacity: {room.capacity} seats • Hours:{' '}
-                      {String(room.openHour).padStart(2, '0')}:00 -{' '}
-                      {String(room.closeHour).padStart(2, '0')}:00
-                    </p>
-                  </div>
-                </div>
-
-                {/* Equipment Chips */}
-                {room.equipment && room.equipment.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {room.equipment.map((eq) => (
-                      <span
-                        key={eq}
-                        className="text-[11px] px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-medium capitalize"
-                      >
-                        {eq}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Slot Schedule Grid */}
-              <SlotGrid
-                room={room}
-                slots={room.slots || []}
-                onSelectFreeSlot={handleOpenBooking}
-                onSelectBookedSlot={handleOpenWaitlist}
-              />
-            </div>
-          ))}
+      {/* Late Today Notice (if defaulted to tomorrow) */}
+      {isLateToday && date === tomorrow && (
+        <div className="p-3 bg-paper rounded-panel border border-line flex items-center justify-between text-xs text-text-2">
+          <span>Today is almost over, showing tomorrow.</span>
+          <button
+            type="button"
+            onClick={() => setDate(today)}
+            className="text-xs font-semibold text-mine hover:underline cursor-pointer"
+          >
+            Show today instead
+          </button>
         </div>
       )}
 
-      {/* Booking Confirmation Modal */}
-      <BookingModal
-        isOpen={bookingModalOpen}
+      {/* Compact Filter Bar */}
+      <div className="bg-surface rounded-panel border border-line p-4 space-y-4 shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          {/* Date Quick Buttons */}
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setDate(today)}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-control border transition-colors ${
+                date === today
+                  ? 'bg-mine text-white border-mine'
+                  : 'bg-paper text-text-2 border-line hover:bg-slate-200'
+              }`}
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              onClick={() => setDate(tomorrow)}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-control border transition-colors ${
+                date === tomorrow
+                  ? 'bg-mine text-white border-mine'
+                  : 'bg-paper text-text-2 border-line hover:bg-slate-200'
+              }`}
+            >
+              Tomorrow
+            </button>
+            <div className="relative">
+              <input
+                type="date"
+                value={date}
+                min={today}
+                max={getAddDaysIST(14)}
+                onChange={(e) => setDate(e.target.value)}
+                className="text-xs font-semibold text-ink bg-paper border border-line rounded-control px-2.5 py-1.5 focus:outline-hidden focus:border-mine"
+              />
+            </div>
+          </div>
+
+          {/* Seats Stepper [ - 10 + ] */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-text-2">Seats:</span>
+            <div className="flex items-center border border-line rounded-control overflow-hidden bg-paper">
+              <button
+                type="button"
+                onClick={() => setCapacity((prev) => Math.max(1, (Number(prev) || 10) - 5))}
+                className="w-8 h-8 flex items-center justify-center text-text-2 hover:text-ink hover:bg-line/40 transition-colors"
+                aria-label="Decrease capacity"
+              >
+                <Minus className="w-3 h-3" />
+              </button>
+              <span className="w-10 text-center text-xs font-bold text-ink tabular-nums">
+                {capacity || 'Any'}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCapacity((prev) => (Number(prev) || 5) + 5)}
+                className="w-8 h-8 flex items-center justify-center text-text-2 hover:text-ink hover:bg-line/40 transition-colors"
+                aria-label="Increase capacity"
+              >
+                <Plus className="w-3 h-3" />
+              </button>
+            </div>
+            {capacity && (
+              <button
+                type="button"
+                onClick={() => setCapacity('')}
+                className="text-[11px] text-text-2 hover:text-ink underline"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+
+          {/* Operating Hours Window */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-text-2">Hours:</span>
+            <select
+              value={startHour}
+              onChange={(e) => setStartHour(e.target.value)}
+              className="text-xs font-medium bg-paper border border-line rounded-control px-2 py-1.5 text-ink"
+            >
+              {[8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18].map((h) => (
+                <option key={h} value={h}>
+                  {h}:00
+                </option>
+              ))}
+            </select>
+            <span className="text-xs text-text-2">to</span>
+            <select
+              value={endHour}
+              onChange={(e) => setEndHour(e.target.value)}
+              className="text-xs font-medium bg-paper border border-line rounded-control px-2 py-1.5 text-ink"
+            >
+              {[10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22].map((h) => (
+                <option key={h} value={h}>
+                  {h}:00
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Ask AI Popover */}
+          <Popover
+            width="w-80"
+            trigger={
+              <Button size="sm" variant="secondary" className="gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-mine" />
+                <span>Ask AI</span>
+              </Button>
+            }
+          >
+            {({ close }) => (
+              <div className="p-4 space-y-3">
+                <div className="flex items-center justify-between border-b border-line pb-2">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-mine" />
+                    <span className="font-heading font-semibold text-xs text-ink">
+                      AI Booking Assistant
+                    </span>
+                  </div>
+                  <button onClick={close} className="text-xs text-text-2 hover:text-ink">
+                    ×
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={aiPrompt}
+                  onChange={(e) => setAiPrompt(e.target.value)}
+                  placeholder="e.g. Lab for 30 students tomorrow at 2 PM"
+                  className="w-full text-xs bg-paper border border-line rounded-control p-2 text-ink focus:outline-hidden focus:border-mine"
+                  autoFocus
+                />
+                {aiNotice && (
+                  <p className="text-[11px] text-danger bg-danger-bg p-2 rounded-control">
+                    {aiNotice}
+                  </p>
+                )}
+                <Button
+                  size="sm"
+                  className="w-full"
+                  isLoading={aiLoading}
+                  onClick={() => handleAiParse(close)}
+                >
+                  Apply AI Filters
+                </Button>
+              </div>
+            )}
+          </Popover>
+        </div>
+
+        {/* Equipment Chips with Room Counts */}
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-line">
+          <span className="text-xs font-semibold text-text-2 mr-1">Equipment:</span>
+          {equipmentOptions.map((eq) => {
+            const isSelected = selectedEquipment.includes(eq.id);
+            const count = equipmentCounts[eq.id] || 0;
+
+            return (
+              <button
+                key={eq.id}
+                type="button"
+                onClick={() => toggleEquipment(eq.id)}
+                className={`text-xs px-2.5 py-1 rounded-chip border transition-colors flex items-center gap-1.5 ${
+                  isSelected
+                    ? 'bg-mine text-white border-mine font-semibold shadow-xs'
+                    : 'bg-paper text-text-2 border-line hover:bg-slate-200'
+                }`}
+              >
+                <span>{eq.label}</span>
+                <span
+                  className={`text-[10px] px-1 py-0.2 rounded-full tabular-nums ${
+                    isSelected ? 'bg-white/20 text-white' : 'bg-surface text-text-2'
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Main Board or List Rendering */}
+      {loading ? (
+        <div className="bg-surface rounded-panel border border-line p-8 space-y-4">
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-6 w-36" />
+            <Skeleton className="h-6 w-24" />
+          </div>
+          <div className="space-y-3 pt-4">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        </div>
+      ) : error ? (
+        <ErrorState
+          title="Could not load timetable"
+          description={error}
+          onRetry={fetchAvailability}
+        />
+      ) : rooms.length === 0 ? (
+        <EmptyState
+          icon={SearchIcon}
+          title="No rooms match these filters"
+          description="Try relaxing your minimum capacity or equipment requirements."
+          actionLabel="Clear filters"
+          onAction={() => {
+            setCapacity('');
+            setSelectedEquipment([]);
+          }}
+        />
+      ) : viewMode === 'board' ? (
+        <TimetableBoard
+          rooms={rooms}
+          date={date}
+          startHour={Number(startHour)}
+          endHour={Number(endHour)}
+          onSelectFreeSlot={handleOpenBooking}
+          onSelectBookedSlot={handleOpenTakenSlot}
+        />
+      ) : (
+        <RoomListView
+          rooms={rooms}
+          onSelectFreeSlot={handleOpenBooking}
+          onSelectBookedSlot={handleOpenTakenSlot}
+        />
+      )}
+
+      {/* Booking Drawer */}
+      <BookingDrawer
+        isOpen={bookingDrawerOpen}
+        onClose={() => setBookingDrawerOpen(false)}
         room={activeBookingRoom}
         date={date}
         slot={activeBookingSlot}
+        onSubmit={handleConfirmBooking}
         isLoading={bookingLoading}
         error={bookingError}
         errorCode={bookingErrorCode}
-        onClose={() => setBookingModalOpen(false)}
-        onSubmit={handleConfirmBooking}
-        onJoinWaitlistFromConflict={() => {
-          setBookingModalOpen(false);
-          handleOpenWaitlist(activeBookingRoom, { slot: activeBookingSlot, waitlistCount: 0 });
+        onSwitchToTakenDrawer={() => {
+          setBookingDrawerOpen(false);
+          handleOpenTakenSlot(activeBookingRoom, {
+            slot: activeBookingSlot,
+            waitlistCount: 0,
+            inWaitlist: false,
+          });
         }}
       />
 
-      {/* Join Waitlist Confirmation Dialog */}
-      <ConfirmDialog
-        isOpen={waitlistModalOpen}
-        title="Join Waitlist"
-        message={`This slot is currently occupied. Joining the waitlist queues you in FIFO order. If the current reservation is cancelled, rejected, or released as a no-show, you will be booked automatically.`}
-        confirmText="Join Waitlist Queue"
-        isLoading={waitlistLoading}
-        onConfirm={handleConfirmWaitlist}
-        onCancel={() => setWaitlistModalOpen(false)}
+      {/* Taken Slot Drawer */}
+      <TakenSlotDrawer
+        isOpen={takenDrawerOpen}
+        onClose={() => setTakenDrawerOpen(false)}
+        room={activeTakenRoom}
+        date={date}
+        slot={activeTakenSlot}
+        slotData={activeTakenSlotData}
+        onJoinWaitlist={handleJoinWaitlist}
+        onLeaveWaitlist={handleLeaveWaitlist}
+        waitlistLoading={waitlistLoading}
       />
     </div>
   );
