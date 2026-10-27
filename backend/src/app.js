@@ -44,6 +44,7 @@ import waitlistRoutes from './routes/waitlist.routes.js';
 import notificationRoutes from './routes/notification.routes.js';
 import userRoutes from './routes/user.routes.js';
 import analyticsRoutes from './routes/analytics.routes.js';
+import aiRoutes from './routes/ai.routes.js';
 
 // Root API router placeholder - will be connected in milestones
 export const apiRouter = express.Router();
@@ -56,6 +57,7 @@ apiRouter.use('/notifications', notificationRoutes);
 apiRouter.use('/users', userRoutes);
 apiRouter.use('/analytics', analyticsRoutes);
 apiRouter.use('/admin', adminRoutes);
+apiRouter.use('/ai', aiRoutes);
 app.use('/api', apiRouter);
 
 // 404 & Error handlers
