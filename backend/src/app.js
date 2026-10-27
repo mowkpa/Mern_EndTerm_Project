@@ -11,16 +11,24 @@ const app = express();
 app.use(helmet());
 
 // CORS configuration
-const allowedOrigins = Array.from(new Set(['http://localhost:5173', 'http://127.0.0.1:5173', env.CLIENT_URL].filter(Boolean)));
+const allowedOrigins = Array.from(
+  new Set([
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'https://vite-project-sandy-one.vercel.app',
+    env.CLIENT_URL,
+  ].filter(Boolean))
+);
+
 app.use(
   cors({
     origin: (origin, callback) => {
       // allow requests with no origin (like mobile apps, curl, or tests)
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(null, true); // Permissive in dev/testing, but client origin honored
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+        return callback(null, origin);
       }
+      return callback(null, origin);
     },
     credentials: true,
   })
