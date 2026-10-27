@@ -40,6 +40,7 @@ import roomRoutes from './routes/room.routes.js';
 import blackoutRoutes from './routes/blackout.routes.js';
 import bookingRoutes from './routes/booking.routes.js';
 import adminRoutes from './routes/admin.routes.js';
+import waitlistRoutes from './routes/waitlist.routes.js';
 
 // Root API router placeholder - will be connected in milestones
 export const apiRouter = express.Router();
@@ -47,6 +48,7 @@ apiRouter.use('/auth', authRoutes);
 apiRouter.use('/rooms', roomRoutes);
 apiRouter.use('/blackouts', blackoutRoutes);
 apiRouter.use('/bookings', bookingRoutes);
+apiRouter.use('/waitlist', waitlistRoutes);
 apiRouter.use('/admin', adminRoutes);
 app.use('/api', apiRouter);
 
