@@ -17,6 +17,7 @@ const notificationSchema = new mongoose.Schema(
         'waitlist_promoted',
         'no_show_released',
         'pending_expired',
+        'booking_reminder',
       ],
       required: true,
     },

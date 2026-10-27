@@ -1,28 +1,35 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  Clock,
   Calendar,
+  Clock,
   Building2,
   CheckCircle2,
+  CalendarPlus,
+  AlertCircle,
   XCircle,
-  AlertTriangle,
-  RotateCcw,
-  Sparkles,
+  FileText,
 } from 'lucide-react';
 import api from '../api/axios';
-import { useToast } from '../components/Toast';
-import StatusBadge from '../components/StatusBadge';
-import ConfirmDialog from '../components/ConfirmDialog';
-import Spinner from '../components/Spinner';
-import EmptyState from '../components/EmptyState';
+import { useToast } from '../components/ui/Toast';
+import { Button } from '../components/ui/Button';
+import { Badge } from '../components/ui/Badge';
+import { StatusBadge } from '../components/ui/StatusBadge';
+import { Countdown } from '../components/ui/Countdown';
+import { SegmentedControl } from '../components/ui/Tabs';
+import { Skeleton } from '../components/ui/Skeleton';
+import { EmptyState } from '../components/ui/EmptyState';
+import { Modal } from '../components/ui/Modal';
+import { formatSlotRange } from '../utils/time';
 
 export default function MyBookings() {
+  const navigate = useNavigate();
   const { addToast } = useToast();
   const [scope, setScope] = useState('upcoming');
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Cancellation State
+  // Cancellation Modal State
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [selectedBookingForCancel, setSelectedBookingForCancel] = useState(null);
   const [cancelLoading, setCancelLoading] = useState(false);
@@ -70,7 +77,7 @@ export default function MyBookings() {
     try {
       setCheckInLoadingId(bookingId);
       await api.post(`/bookings/${bookingId}/check-in`);
-      addToast('Checked in successfully! Enjoy your session.', 'success');
+      addToast('Checked in successfully! Enjoy your space.', 'success');
       fetchBookings();
     } catch (err) {
       addToast(err.response?.data?.message || 'Check-in failed', 'error');
@@ -79,174 +86,271 @@ export default function MyBookings() {
     }
   };
 
-  // Helper to determine if current time is within check-in window
+  const handleDownloadIcs = async (booking) => {
+    try {
+      const res = await api.get(`/bookings/${booking._id}/ics`, {
+        responseType: 'blob',
+      });
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'text/calendar;charset=utf-8' }));
+      const link = document.createElement('a');
+      link.href = url;
+      const roomSlug = (booking.room?.name || 'room').toLowerCase().replace(/[^a-z0-9]/g, '-');
+      link.setAttribute('download', `slotsync-${roomSlug}-${booking.date}.ics`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      addToast('Calendar event downloaded (.ics)', 'success');
+    } catch (err) {
+      addToast('Failed to download calendar event', 'error');
+    }
+  };
+
   const isCheckInEligible = (booking) => {
     if (booking.status !== 'approved') return false;
     const now = new Date();
     const startsAt = new Date(booking.startsAt);
-    const deadline = new Date(booking.checkInDeadline);
-    const earlyStart = new Date(startsAt.getTime() - 10 * 60 * 1000); // 10 min before
+    const deadline = booking.checkInDeadline
+      ? new Date(booking.checkInDeadline)
+      : new Date(startsAt.getTime() + 15 * 60 * 1000);
 
-    return now >= earlyStart && now <= deadline;
+    return now >= startsAt && now <= deadline;
   };
 
+  // Date block parsing helper
+  const getDateBlock = (dateStr) => {
+    try {
+      const [y, m, d] = dateStr.split('-');
+      const dateObj = new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10));
+      const month = dateObj.toLocaleString('en-US', { month: 'short' }).toUpperCase();
+      const day = d;
+      const weekday = dateObj.toLocaleString('en-US', { weekday: 'short' });
+      return { day, month, weekday };
+    } catch {
+      return { day: '??', month: '---', weekday: '---' };
+    }
+  };
+
+  // Past summary calculations
+  const pastTotal = bookings.length;
+  const pastNoShows = bookings.filter((b) => b.status === 'no_show').length;
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      {/* Page Title & Scope Tabs */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      {/* Page Title & Scope Toggle */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-line">
         <div>
           <h1 className="font-heading font-bold text-2xl sm:text-3xl text-ink tracking-tight">
             My bookings
           </h1>
           <p className="text-xs sm:text-sm text-text-2 mt-1">
-            Track active reservations, check in on arrival, or manage cancellations.
+            Track reservations, confirm attendance during check-in, or add sessions to your calendar.
           </p>
         </div>
 
-        <div className="flex bg-slate-100 p-1 rounded-xl">
-          <button
-            onClick={() => setScope('upcoming')}
-            className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
-              scope === 'upcoming'
-                ? 'bg-white text-slate-900 shadow-2xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Upcoming
-          </button>
-          <button
-            onClick={() => setScope('past')}
-            className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
-              scope === 'past'
-                ? 'bg-white text-slate-900 shadow-2xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Past History
-          </button>
-        </div>
+        <SegmentedControl
+          tabs={[
+            { id: 'upcoming', label: 'Upcoming' },
+            { id: 'past', label: 'Past history' },
+          ]}
+          activeTab={scope}
+          onChange={setScope}
+        />
       </div>
 
+      {/* Past Summary Banner */}
+      {scope === 'past' && !loading && bookings.length > 0 && (
+        <div className="p-3 bg-paper rounded-panel border border-line flex items-center justify-between text-xs text-text-2">
+          <span>
+            <strong className="text-ink font-semibold">{pastTotal}</strong> past reservation{pastTotal > 1 ? 's' : ''} recorded.
+          </span>
+          {pastNoShows > 0 ? (
+            <span className="text-danger font-semibold">
+              {pastNoShows} missed ({pastNoShows === 1 ? 'no-show' : 'no-shows'})
+            </span>
+          ) : (
+            <span className="text-free font-semibold">100% attendance rate</span>
+          )}
+        </div>
+      )}
+
       {loading ? (
-        <div className="py-20 flex flex-col items-center justify-center gap-3">
-          <Spinner size="lg" />
-          <p className="text-sm font-medium text-slate-500">Loading your reservations...</p>
+        <div className="space-y-4">
+          <Skeleton className="h-28 w-full rounded-panel" />
+          <Skeleton className="h-28 w-full rounded-panel" />
+          <Skeleton className="h-28 w-full rounded-panel" />
         </div>
       ) : bookings.length === 0 ? (
         <EmptyState
           icon={Calendar}
-          title={scope === 'upcoming' ? 'No upcoming reservations' : 'No past reservations'}
+          title={scope === 'upcoming' ? 'Nothing booked yet' : 'No past bookings'}
           description={
             scope === 'upcoming'
-              ? 'You do not have any active room bookings. Browse available spaces in the directory to reserve a slot.'
-              : 'Your booking history will appear here once sessions are completed or expired.'
+              ? 'You do not have any upcoming room reservations. Browse the timetable board to reserve a space.'
+              : 'Your booking history will appear here once sessions are completed, cancelled, or expired.'
           }
+          actionLabel={scope === 'upcoming' ? 'Find a room' : undefined}
+          onAction={scope === 'upcoming' ? () => navigate('/search') : undefined}
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-4">
           {bookings.map((booking) => {
-            const slotStartHour = `${String(booking.slot).padStart(2, '0')}:00`;
-            const slotEndHour = `${String(booking.slot + 1).padStart(2, '0')}:00`;
-            const eligibleForCheckIn = isCheckInEligible(booking);
+            const dateBlock = getDateBlock(booking.date);
+            const timeLabel = formatSlotRange(booking.slot);
+            const inCheckInWindow = isCheckInEligible(booking);
+            const isCheckedIn = booking.status === 'checked_in';
+            const isNoShow = booking.status === 'no_show';
+            const isPending = booking.status === 'pending';
+            const isRejected = booking.status === 'rejected';
             const canCancel =
-              booking.status === 'pending' ||
+              isPending ||
               (booking.status === 'approved' && new Date() < new Date(booking.startsAt));
 
             return (
               <div
                 key={booking._id}
-                className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs hover:border-slate-300 transition-all flex flex-col justify-between space-y-4"
+                className={`bg-surface rounded-panel p-4 sm:p-5 border transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                  inCheckInWindow
+                    ? 'border-line border-l-4 border-l-mine shadow-xs'
+                    : isNoShow
+                    ? 'border-danger/30 bg-danger-bg/20'
+                    : 'border-line hover:border-text-2/30'
+                }`}
               >
-                <div>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-base font-bold text-slate-900">
-                          {booking.room?.name || 'Campus Room'}
-                        </h3>
-                        {booking.fromWaitlist && (
-                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                            From Waitlist
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-slate-500 flex items-center gap-1.5 mt-1">
-                        <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                        {booking.room?.building || 'Main Campus'}
+                {/* Left: Date Block & Room Info */}
+                <div className="flex items-start gap-4 flex-1 min-w-0">
+                  {/* Date Block */}
+                  <div className="w-16 h-16 rounded-control bg-paper border border-line flex flex-col items-center justify-center shrink-0 text-center select-none">
+                    <span className="text-[10px] font-bold text-text-2 uppercase tracking-wider">
+                      {dateBlock.month}
+                    </span>
+                    <span className="font-heading font-bold text-xl text-ink leading-tight tabular-nums">
+                      {dateBlock.day}
+                    </span>
+                    <span className="text-[10px] text-text-2">{dateBlock.weekday}</span>
+                  </div>
+
+                  {/* Room & Booking Details */}
+                  <div className="space-y-1.5 flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-heading font-bold text-base text-ink truncate">
+                        {booking.room?.name || 'Campus Room'}
+                      </h3>
+                      <StatusBadge status={booking.status} />
+                      {booking.fromWaitlist && (
+                        <Badge variant="mine" size="sm">
+                          From waitlist
+                        </Badge>
+                      )}
+                      {booking.batchId && (
+                        <Badge variant="neutral" size="sm">
+                          Multi-hour
+                        </Badge>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-3 text-xs text-text-2 flex-wrap">
+                      <span className="inline-flex items-center gap-1">
+                        <Building2 className="w-3.5 h-3.5" />
+                        {booking.room?.building || 'Campus'}
+                      </span>
+                      <span>•</span>
+                      <span className="inline-flex items-center gap-1 font-semibold text-ink">
+                        <Clock className="w-3.5 h-3.5" />
+                        {timeLabel}
+                      </span>
+                    </div>
+
+                    {booking.purpose && (
+                      <p className="text-xs text-text-2 line-clamp-1">
+                        <span className="font-medium text-ink">Purpose: </span>
+                        {booking.purpose}
                       </p>
-                    </div>
-                    <StatusBadge status={booking.status} />
+                    )}
+
+                    {/* Rejection Note Strip */}
+                    {isRejected && booking.decisionNote && (
+                      <div className="mt-2 p-2.5 rounded-control bg-danger-bg border border-danger/20 text-xs text-danger flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                        <div>
+                          <span className="font-bold">Administrator decision note: </span>
+                          <span>{booking.decisionNote}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Pending admin review notice */}
+                    {isPending && (
+                      <p className="text-xs text-pending font-medium flex items-center gap-1.5 mt-1">
+                        <Clock className="w-3.5 h-3.5" />
+                        Waiting for administrator approval
+                      </p>
+                    )}
                   </div>
-
-                  {/* Date & Time pills */}
-                  <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 text-slate-700 border border-slate-200 font-medium">
-                      <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                      {booking.date}
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 text-slate-700 border border-slate-200 font-medium">
-                      <Clock className="w-3.5 h-3.5 text-slate-400" />
-                      {slotStartHour} - {slotEndHour}
-                    </span>
-                  </div>
-
-                  <p className="mt-3 text-xs text-slate-600 line-clamp-2">
-                    <span className="font-semibold text-slate-700">Purpose: </span>
-                    {booking.purpose}
-                  </p>
-
-                  {/* Rejection Note */}
-                  {booking.status === 'rejected' && booking.decisionNote && (
-                    <div className="mt-3 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800">
-                      <span className="font-semibold">Rejection reason: </span>
-                      {booking.decisionNote}
-                    </div>
-                  )}
                 </div>
 
-                {/* Actions Footer */}
-                <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
-                  {canCancel ? (
-                    <button
-                      type="button"
-                      onClick={() => handleCancelClick(booking)}
-                      className="text-xs font-semibold text-slate-500 hover:text-rose-600 transition-colors"
-                    >
-                      Cancel Booking
-                    </button>
-                  ) : (
-                    <span className="text-[11px] text-slate-400">
-                      {booking.status === 'approved' ? 'Locked (slot started)' : ''}
-                    </span>
+                {/* Right: Countdown, Check-in & Actions */}
+                <div className="flex flex-col sm:flex-row md:flex-col lg:flex-row items-start sm:items-center md:items-end lg:items-center gap-3 shrink-0 pt-3 md:pt-0 border-t md:border-t-0 border-line">
+                  {/* Countdown for Upcoming Approved */}
+                  {scope === 'upcoming' && booking.status === 'approved' && (
+                    <div className="text-left md:text-right">
+                      <span className="text-[11px] text-text-2 block font-medium">
+                        {inCheckInWindow ? 'Check-in active' : 'Starts in'}
+                      </span>
+                      {inCheckInWindow ? (
+                        <span className="text-xs font-bold text-mine">Check-in open</span>
+                      ) : (
+                        <Countdown
+                          targetDate={booking.startsAt}
+                          className="text-xs font-bold text-ink"
+                        />
+                      )}
+                    </div>
                   )}
 
-                  {booking.status === 'approved' && (
-                    <button
-                      type="button"
-                      onClick={() => handleCheckIn(booking._id)}
-                      disabled={!eligibleForCheckIn || checkInLoadingId === booking._id}
-                      className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-2xs flex items-center gap-1.5 ${
-                        eligibleForCheckIn
-                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/20'
-                          : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
-                      }`}
-                      title={
-                        eligibleForCheckIn
-                          ? 'Check in to confirm attendance'
-                          : 'Check-in opens 10 minutes before slot start'
-                      }
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* Add to Calendar (.ics download) */}
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => handleDownloadIcs(booking)}
+                      title="Download .ics calendar event"
                     >
-                      {checkInLoadingId === booking._id && <Spinner size="sm" />}
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      {eligibleForCheckIn ? 'Check In Now' : 'Check-In Window (10m prior)'}
-                    </button>
-                  )}
+                      <CalendarPlus className="w-3.5 h-3.5 mr-1" />
+                      .ics
+                    </Button>
 
-                  {booking.status === 'checked_in' && (
-                    <span className="text-xs font-semibold text-blue-600 flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Checked In
-                    </span>
-                  )}
+                    {/* Check In Button */}
+                    {booking.status === 'approved' && (
+                      <Button
+                        size="sm"
+                        variant={inCheckInWindow ? 'primary' : 'secondary'}
+                        disabled={!inCheckInWindow || checkInLoadingId === booking._id}
+                        isLoading={checkInLoadingId === booking._id}
+                        onClick={() => handleCheckIn(booking._id)}
+                        title={
+                          inCheckInWindow
+                            ? 'Check in to confirm attendance'
+                            : `Check-in opens at ${new Date(booking.startsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                        }
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                        {inCheckInWindow ? 'Check in' : 'Check-in locked'}
+                      </Button>
+                    )}
+
+                    {/* Cancel Action */}
+                    {canCancel && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleCancelClick(booking)}
+                        className="text-danger hover:bg-danger-bg hover:text-danger"
+                      >
+                        Cancel
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -255,16 +359,40 @@ export default function MyBookings() {
       )}
 
       {/* Cancel Confirmation Modal */}
-      <ConfirmDialog
+      <Modal
         isOpen={cancelModalOpen}
-        title="Cancel Reservation"
-        message="Are you sure you want to cancel this booking? The slot will immediately be released and auto-assigned to the next student in the waitlist queue."
-        confirmText="Confirm Cancellation"
-        isDanger={true}
-        isLoading={cancelLoading}
-        onConfirm={handleConfirmCancel}
-        onCancel={() => setCancelModalOpen(false)}
-      />
+        onClose={() => setCancelModalOpen(false)}
+        title="Cancel reservation"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-text-2 leading-relaxed">
+            Are you sure you want to cancel your booking for{' '}
+            <strong className="text-ink">
+              {selectedBookingForCancel?.room?.name}
+            </strong>{' '}
+            on {selectedBookingForCancel?.date} (Slot {selectedBookingForCancel?.slot}:00)?
+          </p>
+          <p className="text-xs text-text-2 bg-paper p-3 rounded-control border border-line">
+            The slot will immediately be released and automatically granted to the next student waiting in the waitlist queue.
+          </p>
+          <div className="flex items-center justify-end gap-3 pt-2">
+            <Button
+              variant="secondary"
+              onClick={() => setCancelModalOpen(false)}
+              disabled={cancelLoading}
+            >
+              Keep booking
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleConfirmCancel}
+              isLoading={cancelLoading}
+            >
+              Yes, cancel booking
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

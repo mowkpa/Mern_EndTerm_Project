@@ -114,3 +114,61 @@ export const checkInBooking = async (req, res) => {
   const booking = await checkIn(req.params.id, req.user);
   res.status(200).json({ message: 'Checked in successfully', booking });
 };
+
+export const exportIcs = async (req, res) => {
+  const booking = await Booking.findById(req.params.id)
+    .populate('room', 'name building')
+    .populate('user', 'name email');
+
+  if (!booking) {
+    throw httpError(404, 'Booking not found');
+  }
+
+  const isOwner = booking.user._id.toString() === req.user._id.toString();
+  const isAdmin = req.user.role === 'admin';
+  if (!isOwner && !isAdmin) {
+    throw httpError(403, 'Forbidden: You can only export your own bookings');
+  }
+
+  const formatUtc = (date) => {
+    return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+  };
+
+  const startUtc = formatUtc(booking.startsAt);
+  const endUtc = formatUtc(booking.endsAt);
+  const stampUtc = formatUtc(new Date());
+
+  const roomName = booking.room?.name || 'Room';
+  const building = booking.room?.building || 'Campus';
+  const summary = `${roomName}`;
+  const description = `${booking.purpose || 'Campus Space Booking'}`;
+  const uid = `booking-${booking._id}@slotsync`;
+
+  const icsLines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//SlotSync//Campus Room Booking//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    'BEGIN:VEVENT',
+    `UID:${uid}`,
+    `DTSTAMP:${stampUtc}`,
+    `DTSTART:${startUtc}`,
+    `DTEND:${endUtc}`,
+    `SUMMARY:${summary}`,
+    `LOCATION:${building}`,
+    `DESCRIPTION:${description}`,
+    'STATUS:CONFIRMED',
+    'END:VEVENT',
+    'END:VCALENDAR',
+    '',
+  ];
+
+  const icsContent = icsLines.join('\r\n');
+  const safeRoomName = roomName.toLowerCase().replace(/[^a-z0-9]/g, '-');
+  const filename = `slotsync-${safeRoomName}-${booking.date}.ics`;
+
+  res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.status(200).send(icsContent);
+};

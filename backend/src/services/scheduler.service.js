@@ -110,16 +110,56 @@ export const expireWaitlist = async (now = new Date()) => {
 };
 
 /**
+ * Sends check-in reminder notifications to users whose booking starts in 10 to 15 minutes.
+ * Uses atomic findOneAndUpdate claim to ensure idempotency.
+ */
+export const sendReminders = async (now = new Date()) => {
+  const windowStart = new Date(now.getTime() + 10 * 60 * 1000);
+  const windowEnd = new Date(now.getTime() + 15 * 60 * 1000);
+
+  const upcomingBookings = await Booking.find({
+    status: 'approved',
+    reminderSentAt: null,
+    startsAt: { $gte: windowStart, $lte: windowEnd },
+  }).populate('room user');
+
+  let sentCount = 0;
+  for (const booking of upcomingBookings) {
+    // Atomically claim to prevent duplicate notifications
+    const claimed = await Booking.findOneAndUpdate(
+      { _id: booking._id, reminderSentAt: null },
+      { $set: { reminderSentAt: now } },
+      { new: true }
+    );
+
+    if (claimed) {
+      const roomName = booking.room?.name || 'Room';
+      await notify(
+        booking.user._id,
+        'booking_reminder',
+        `Your booking in ${roomName} starts in 10 minutes. Check-in is open.`,
+        booking._id
+      );
+      sentCount++;
+    }
+  }
+
+  return sentCount;
+};
+
+/**
  * Master idempotent reconciliation function.
  * Safe to call repeatedly without state corruption.
  */
 export const reconcile = async (now = new Date()) => {
+  const remindersSent = await sendReminders(now);
   const releasedNoShows = await releaseNoShows(now);
   const expiredPending = await expirePending(now);
   const completedFinished = await completeFinished(now);
   const expiredWaitlist = await expireWaitlist(now);
 
   return {
+    remindersSent,
     releasedNoShows,
     expiredPending,
     completedFinished,
