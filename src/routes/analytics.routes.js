@@ -1,10 +1,13 @@
-import express from 'express';
+﻿import express from 'express';
 import {
   summary,
   utilization,
   peakHours,
   noShows,
   daily,
+  heatmap,
+  insights,
+  exportCsv,
   roomReleaseRate,
 } from '../controllers/analytics.controller.js';
 import { protect } from '../middlewares/auth.middleware.js';
@@ -24,5 +27,8 @@ router.get('/utilization', asyncHandler(utilization));
 router.get('/peak-hours', asyncHandler(peakHours));
 router.get('/no-shows', asyncHandler(noShows));
 router.get('/daily', asyncHandler(daily));
+router.get('/heatmap', asyncHandler(heatmap));
+router.get('/insights', asyncHandler(insights));
+router.get('/export.csv', asyncHandler(exportCsv));
 
 export default router;
