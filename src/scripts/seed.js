@@ -9,13 +9,6 @@ import { Blackout } from '../models/blackout.model.js';
 import { Notification } from '../models/notification.model.js';
 import { todayIST, addDaysIST, slotStart, slotEnd } from '../utils/time.js';
 
-const isProduction = env.NODE_ENV === 'production';
-const hasForceFlag = process.argv.includes('--force');
-
-if (isProduction && !hasForceFlag) {
-  console.error('Refusing to seed production database without --force flag.');
-  process.exit(1);
-}
 
 export const seedData = async () => {
 
@@ -359,6 +352,13 @@ export const seedData = async () => {
 
 export const seedDatabase = async () => {
   try {
+    const isProduction = env.NODE_ENV === 'production';
+    const hasForceFlag = process.argv.includes('--force');
+    if (isProduction && !hasForceFlag) {
+      console.error('Refusing to seed production database without --force flag.');
+      process.exit(1);
+    }
+
     console.log(`[Seed] Connecting to database...`);
     await mongoose.connect(env.MONGODB_URI);
     console.log(`[Seed] Connected to ${mongoose.connection.host}`);
